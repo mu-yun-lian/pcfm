@@ -659,6 +659,7 @@ def render_person_surface_style(
     }
     invalid_rules: list[str] = []
     styled_fields: set[str] = set()
+    is_chinese = bool(re.search(r"[\u4e00-\u9fff]", neutral))
     for raw_rule in raw_rules:
         if not isinstance(raw_rule, Mapping):
             invalid_rules.append("surface_rule_not_object")
@@ -667,9 +668,12 @@ def render_person_surface_style(
         field = operation_fields.get(operation)
         prefix = str(raw_rule.get("prefix", ""))
         provenance = [str(value) for value in raw_rule.get("provenance_event_ids", [])]
+        prefix_is_chinese = bool(re.search(r"[\u4e00-\u9fff]", prefix))
         if (
             field is None
             or prefix not in SAFE_SURFACE_CONNECTORS
+            or (is_chinese and not prefix_is_chinese)
+            or (not is_chinese and prefix_is_chinese)
             or int(raw_rule.get("observed_count", 0)) < 2
             or not provenance
         ):
