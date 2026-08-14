@@ -202,13 +202,10 @@ class ResponseKernelV2Tests(unittest.TestCase):
             "What do you think of Trump?",
             dialogue_model_ref="fake:model",
         )
-        self.assertEqual("refused", reply["answer_status"])
+        # 宽评价问题不得降级到第三方简报；走对象评价投影
+        self.assertEqual("object_evaluation_projection_answer", reply["answer_status"])
         self.assertNotIn("He attracts", reply["text"])
-        self.assertEqual(0, reply["model_usage"]["generation_calls"])
-        self.assertIn(
-            "person_opinion_evidence_required",
-            reply["structured_prediction"]["refusal_reasons"],
-        )
+        self.assertNotIn("polarizing", reply["text"])
 
     def test_partial_answer_and_clarification_are_distinct_from_refusal(self) -> None:
         partial = self.send("Tell us what prompted you to write that note and describe the events that followed.")
