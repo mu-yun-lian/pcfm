@@ -56,6 +56,19 @@ STANCES = (
     "insufficient_evidence",
 )
 
+# 公开反应倾向的 8 类封闭分类（operationized，非心理标签）。
+# 每个伴随倾向原子（tradeoff）都必须属于其中一类。
+TENDENCY_TYPES = (
+    "object_evaluation",            # 对对象的支持/反对/混合评价
+    "principle_priority",           # 行为原则和优先级
+    "conditional_policy_preference",  # 条件性政策偏好
+    "means_ends",                   # 手段—目的判断
+    "responsibility_attribution",   # 责任归属
+    "risk_tolerance",               # 风险容忍度
+    "rule_procedure_tradeoff",      # 对规则/程序/结果/公平的权衡
+    "behavior_evaluation",          # 对人物行为方式的评价
+)
+
 DATA_ROLE_MAP = {
     "model_source": "parameter_training",
     "applicability_reference": "applicability_calibration",

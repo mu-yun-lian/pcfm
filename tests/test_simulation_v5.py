@@ -431,6 +431,7 @@ class V5ModelFixture:
                             "demonstrated_claim_spans": [],
                             "tradeoffs": [
                                 {
+                                    "tendency_type": "principle_priority",
                                     "protected_interest_id": "safety",
                                     "accepted_cost_id": "speed",
                                     "protected_interest_span": "safety",

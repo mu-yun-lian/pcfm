@@ -27,6 +27,7 @@ from .expression_renderer import (
     render_person_surface_style,
 )
 from .response_prediction import (
+    TENDENCY_TYPES,
     ResponsePredictionError,
     ResponsePredictionKernel,
     canonical_hash as response_canonical_hash,
@@ -942,8 +943,9 @@ class ConversationWorkbench:
                             "interlocutor, speaker, speaker_role, audience, locator, speech_act, "
                             "stance, claims, memories, uncertainties, domain_ids, condition_spans, "
                             "reason_spans, demonstrated_claim_spans, and tradeoffs. Each tradeoff "
-                            "must contain protected_interest_id, accepted_cost_id, "
+                            "must contain tendency_type, protected_interest_id, accepted_cost_id, "
                             "protected_interest_span, accepted_cost_span, and evidence_span. "
+                            "tendency_type must be one of the supplied allowed_tendency_type_ids. "
                             "Every span must be copied verbatim from the supplied material. Use "
                             "only allowed IDs, omit unsupported fields, and return unknown rather "
                             "than infer hidden values. Every result remains an unverified candidate."
@@ -958,6 +960,7 @@ class ConversationWorkbench:
                                 "source_locator": source.get("source_locator", ""),
                                 "allowed_interest_ids": sorted(INTERESTS),
                                 "allowed_domain_ids": sorted(DOMAIN_ALIASES),
+                                "allowed_tendency_type_ids": sorted(TENDENCY_TYPES),
                                 "material": material,
                             },
                             ensure_ascii=False,
@@ -1017,6 +1020,7 @@ class ConversationWorkbench:
                         {
                             key: str(value.get(key, "")).strip()
                             for key in (
+                                "tendency_type",
                                 "protected_interest_id",
                                 "accepted_cost_id",
                                 "protected_interest_span",
@@ -1156,14 +1160,16 @@ class ConversationWorkbench:
                 str(tradeoff.get("accepted_cost_span", "")),
                 str(tradeoff.get("evidence_span", "")),
             ]
+            tendency_type = str(tradeoff.get("tendency_type", "")).strip()
             if (
-                protected not in INTERESTS
+                tendency_type not in TENDENCY_TYPES
+                or protected not in INTERESTS
                 or cost not in INTERESTS
                 or protected == cost
                 or any(not span or span.casefold() not in evidence_text.casefold() for span in spans)
             ):
                 raise ConversationError(
-                    "The candidate tradeoff is not grounded in exact source spans or the closed interest taxonomy."
+                    "The candidate tradeoff is not grounded in exact source spans, the closed interest taxonomy, or the closed tendency-type taxonomy."
                 )
             reviewed_tradeoffs.append(copy.deepcopy(tradeoff))
         reviewed_v4 = {

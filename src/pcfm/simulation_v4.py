@@ -300,6 +300,7 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                 continue
             clean_tradeoffs.append(
                 {
+                    "tendency_type": str(tradeoff.get("tendency_type", "")),
                     "protected_interest_id": protected,
                     "accepted_cost_id": cost,
                     "protected_interest_span": protected_span,
@@ -347,6 +348,7 @@ def _preference_atoms(frames: Sequence[Mapping[str, object]]) -> tuple[list[dict
             atoms.append(
                 {
                     "preference_atom_id": f"preference-v4-{_hash([frame['event_frame_id'], protected, cost])[:16]}",
+                    "tendency_type": str(tradeoff.get("tendency_type", "")),
                     "event_frame_id": str(frame["event_frame_id"]),
                     "source_id": str(frame["source_id"]),
                     "source_lineage": str(frame["source_lineage"]),
@@ -390,6 +392,9 @@ def _structures(atoms: Sequence[Mapping[str, object]]) -> list[dict[str, object]
         structures.append(
             {
                 "preference_structure_id": f"structure-v4-{_hash(pair)[:16]}",
+                "tendency_types": sorted(
+                    {str(item.get("tendency_type", "")) for item in values if item.get("tendency_type")}
+                ),
                 "protected_interest_id": protected,
                 "accepted_cost_id": cost,
                 "protected_interest_label": str(INTERESTS[protected]["label_zh"]),
