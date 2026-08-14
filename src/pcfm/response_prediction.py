@@ -69,6 +69,24 @@ TENDENCY_TYPES = (
     "behavior_evaluation",          # 对人物行为方式的评价
 )
 
+# 取舍类倾向（有 preferred/sacrificed 双方）；评价类倾向（有 target+direction）
+TRADEOFF_TENDENCY_TYPES = frozenset(
+    {
+        "principle_priority",
+        "conditional_policy_preference",
+        "means_ends",
+        "risk_tolerance",
+        "rule_procedure_tradeoff",
+    }
+)
+EVALUATION_TENDENCY_TYPES = frozenset(
+    {
+        "object_evaluation",
+        "behavior_evaluation",
+        "responsibility_attribution",
+    }
+)
+
 DATA_ROLE_MAP = {
     "model_source": "parameter_training",
     "applicability_reference": "applicability_calibration",

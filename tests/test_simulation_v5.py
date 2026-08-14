@@ -258,11 +258,9 @@ class SimulationV5Tests(unittest.TestCase):
             history=[],
             query_plan={},
         )
-        self.assertEqual("refused", result["answer_status"])
-        self.assertIn(
-            "person_opinion_evidence_required",
-            result["structured_prediction"]["refusal_reasons"],
-        )
+        # 宽评价问题不得降级到百科/检索；走对象评价投影，证据不足时诚实说明
+        self.assertEqual("object_evaluation_projection_answer", result["answer_status"])
+        self.assertNotEqual("general_assisted", result["answer_status"])
 
     def test_single_event_creates_low_confidence_public_orientation(self) -> None:
         raw = {
@@ -339,6 +337,7 @@ class SimulationV5Tests(unittest.TestCase):
             reviewed_sources=[trump_source],
             scope={"language": "en"},
         )
+        # 宽评价问题（总括评价）不得落到检索，而走对象评价投影
         result = self.kernel.predict(
             artifact,
             text="你认为特朗普怎么样",
@@ -346,12 +345,9 @@ class SimulationV5Tests(unittest.TestCase):
             conversation_context={},
             query_plan={},
         )
-        self.assertEqual("similar_event_evidence_answer", result["answer_status"])
+        self.assertEqual("object_evaluation_projection_answer", result["answer_status"])
         self.assertEqual(
-            "similar_event_evidence", result["prediction_trace"]["prediction_path"]
-        )
-        self.assertEqual(
-            1, len(result["structured_prediction"]["evidence_event_ids"])
+            "object_evaluation_projection", result["prediction_trace"]["prediction_path"]
         )
 
 
@@ -564,9 +560,8 @@ class SimulationV5ProductIntegrationTests(unittest.TestCase):
             dialogue_model_ref="fake:model",
         )
         self.assertNotEqual("general_assisted", reply["answer_status"])
-        self.assertEqual("similar_event_evidence_answer", reply["answer_status"])
+        self.assertEqual("object_evaluation_projection_answer", reply["answer_status"])
         self.assertEqual("simulation-v5", reply["prediction_trace"]["kernel"])
-        self.assertEqual(2, reply["model_usage"]["planning_calls"])
         self.assertNotEqual("not_run_no_person_prediction", reply["style_status"])
 
 

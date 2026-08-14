@@ -27,7 +27,10 @@ from .expression_renderer import (
     render_person_surface_style,
 )
 from .response_prediction import (
+    EVALUATION_TENDENCY_TYPES,
+    STANCES,
     TENDENCY_TYPES,
+    TRADEOFF_TENDENCY_TYPES,
     ResponsePredictionError,
     ResponsePredictionKernel,
     canonical_hash as response_canonical_hash,
@@ -945,6 +948,10 @@ class ConversationWorkbench:
                             "reason_spans, demonstrated_claim_spans, and tradeoffs. Each tradeoff "
                             "must contain tendency_type, protected_interest_id, accepted_cost_id, "
                             "protected_interest_span, accepted_cost_span, and evidence_span. "
+                            "For evaluation tendencies (object_evaluation, behavior_evaluation, "
+                            "responsibility_attribution), also return direction (one of the supplied "
+                            "allowed_stances) and target (the evaluated object, copied verbatim from "
+                            "the material); accepted_cost_id may be empty for those. "
                             "tendency_type must be one of the supplied allowed_tendency_type_ids. "
                             "Every span must be copied verbatim from the supplied material. Use "
                             "only allowed IDs, omit unsupported fields, and return unknown rather "
@@ -961,6 +968,7 @@ class ConversationWorkbench:
                                 "allowed_interest_ids": sorted(INTERESTS),
                                 "allowed_domain_ids": sorted(DOMAIN_ALIASES),
                                 "allowed_tendency_type_ids": sorted(TENDENCY_TYPES),
+                                "allowed_stances": sorted(STANCES),
                                 "material": material,
                             },
                             ensure_ascii=False,
@@ -1026,6 +1034,9 @@ class ConversationWorkbench:
                                 "protected_interest_span",
                                 "accepted_cost_span",
                                 "evidence_span",
+                                "direction",
+                                "target",
+                                "target_span",
                             )
                         }
                         for value in raw.get("tradeoffs", [])
@@ -1161,15 +1172,37 @@ class ConversationWorkbench:
                 str(tradeoff.get("evidence_span", "")),
             ]
             tendency_type = str(tradeoff.get("tendency_type", "")).strip()
+            direction = str(tradeoff.get("direction", "")).strip()
+            is_evaluation = tendency_type in EVALUATION_TENDENCY_TYPES
+            is_tradeoff = tendency_type in TRADEOFF_TENDENCY_TYPES
+            interest_valid = protected in INTERESTS and (
+                (is_tradeoff and cost in INTERESTS and protected != cost)
+                or (is_evaluation and (not cost or cost in INTERESTS))
+            )
+            direction_valid = (not is_evaluation) or direction in STANCES
+            required_spans = [
+                str(tradeoff.get("protected_interest_span", "")),
+                str(tradeoff.get("evidence_span", "")),
+            ]
+            optional_spans = [
+                str(tradeoff.get("accepted_cost_span", "")),
+                str(tradeoff.get("target_span", "")),
+            ]
+            spans_valid = all(
+                span and span.casefold() in evidence_text.casefold()
+                for span in required_spans
+            ) and all(
+                not span or span.casefold() in evidence_text.casefold()
+                for span in optional_spans
+            )
             if (
                 tendency_type not in TENDENCY_TYPES
-                or protected not in INTERESTS
-                or cost not in INTERESTS
-                or protected == cost
-                or any(not span or span.casefold() not in evidence_text.casefold() for span in spans)
+                or not interest_valid
+                or not direction_valid
+                or not spans_valid
             ):
                 raise ConversationError(
-                    "The candidate tradeoff is not grounded in exact source spans, the closed interest taxonomy, or the closed tendency-type taxonomy."
+                    "The candidate tendency is not grounded in exact source spans, the closed interest/stance taxonomy, or the closed tendency-type taxonomy."
                 )
             reviewed_tradeoffs.append(copy.deepcopy(tradeoff))
         reviewed_v4 = {
@@ -2352,7 +2385,12 @@ class ConversationWorkbench:
                         "content": (
                             "Produce a grounded semantic routing candidate, not a person stance. "
                             "Return JSON with resolved_message_ids, domain_ids, scenario_effects, "
-                            "selected_event_ids, and selected_structure_ids. A scenario effect has "
+                            "selected_event_ids, selected_structure_ids, question_scope, and "
+                            "target_entity. question_scope is one of narrow (a specific judgment "
+                            "equivalent to a historical question), wide (a broad evaluation needing "
+                            "multi-dimensional synthesis), or composite (several sub-questions). "
+                            "target_entity is the evaluated object copied from the message, or empty. "
+                            "A scenario effect has "
                             "an allow-listed interest_id, one effect (advances, constrains, "
                             "threatens, or neutral), and scenario_span copied exactly from the "
                             "current or resolved message. It describes the scenario, not what the person "

@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone
 from typing import Mapping, Sequence
 
+from .response_prediction import EVALUATION_TENDENCY_TYPES
 from .response_prediction_v2 import ResponsePredictionKernelV2
 from .simulation_v4 import (
     DOMAIN_ALIASES,
@@ -296,6 +297,7 @@ class SimulationKernelV5:
                 {
                     "orientation_id": str(item["preference_structure_id"]),
                     "tendency_types": list(map(str, item.get("tendency_types", []))),
+                    "directions": list(map(str, item.get("directions", []))),
                     "protected_interest_id": str(item["protected_interest_id"]),
                     "accepted_cost_id": str(item["accepted_cost_id"]),
                     "supporting_event_ids": list(map(str, item["supporting_event_ids"])),
@@ -511,9 +513,19 @@ class SimulationKernelV5:
             re.I,
         ) else "public"
         years = [int(value) for value in re.findall(r"\b(?:19|20)\d{2}\b", combined)]
+        question_scope = str(plan.get("question_scope", "")).strip()
+        if question_scope not in {"narrow", "wide", "composite"}:
+            question_scope = ""
+        # 人物评价类开放式问题（"你认为 X 怎么样"）本质是宽评价，确定性默认 wide，
+        # 避免在 LLM 语义规划被跳过时落到检索。
+        if not question_scope and _is_person_opinion_request(text):
+            question_scope = "wide"
+        target_entity = str(plan.get("target_entity", "")).strip()
         return {
             "query": text,
             "combined_query": combined,
+            "question_scope": question_scope,
+            "target_entity": target_entity,
             "resolved_message_ids": resolved_ids,
             "resolved_message_roles": [str(item.get("role", "")) for item in resolved_messages],
             "context_evidence_event_ids": context_evidence_event_ids,
@@ -764,6 +776,31 @@ class SimulationKernelV5:
                         "selected_event_ids": event_ids,
                     },
                 )
+        evaluation = self._object_evaluation_projection(artifact, query)
+        if evaluation is not None:
+            return self._result(
+                artifact,
+                answer_status="object_evaluation_projection_answer",
+                speech_act="direct_answer",
+                stance=str(evaluation["stance"]),
+                claims=[str(evaluation["statement"])],
+                reasons=list(map(str, evaluation["reasons"])),
+                uncertainties=[
+                    "这些是历史公开表态的多维归纳，不构成对当前情境的确定预测。"
+                ],
+                evidence_event_ids=list(map(str, evaluation["evidence_event_ids"])),
+                response_basis={
+                    "path": "object_evaluation_projection",
+                    "person_prediction_status": "evaluation_tendency_projection",
+                    "query_frame": query,
+                    "projection_kind": evaluation["projection_kind"],
+                    "dimensions": evaluation["dimensions"],
+                    "target": evaluation["target"],
+                },
+                applicability=str(evaluation["applicability"]),
+                support=float(evaluation["support"]),
+                trace={**trace, "prediction_path": "object_evaluation_projection"},
+            )
         projection = self._orientation_projection(artifact, query)
         if projection is None:
             projection = self._value_orientation_projection(artifact, query)
@@ -1091,6 +1128,124 @@ class SimulationKernelV5:
             "projection_kind": "event_public_salience",
             "applicability": "matched_event_public_salience_low_confidence",
             "scenario_effect": effect,
+        }
+
+    @staticmethod
+    def _object_evaluation_projection(
+        artifact: Mapping[str, object], query: Mapping[str, object]
+    ) -> dict[str, object] | None:
+        """Wide evaluation problems: derive a multi-dimensional direction from
+        evaluation-class tendency atoms instead of falling back to retrieval."""
+        if query.get("question_scope") != "wide":
+            return None
+        # 有利益取舍结构（scenario_effects）时走取向投影，不做对象评价投影
+        if query.get("scenario_effects"):
+            return None
+        target = str(query.get("target_entity", "")).strip()
+        domains = set(map(str, query.get("domain_ids", [])))
+        dimensions: list[dict[str, object]] = []
+        for raw in artifact.get("orientation_index", []):
+            item = dict(raw)
+            types = set(map(str, item.get("tendency_types", [])))
+            directions = list(map(str, item.get("directions", [])))
+            if not (types & EVALUATION_TENDENCY_TYPES):
+                continue
+            if not directions:
+                continue
+            item_domains = set(map(str, item.get("primary_domains", [])))
+            if domains and item_domains and not (domains & item_domains):
+                continue
+            dimensions.append(
+                {
+                    "interest_id": str(item.get("protected_interest_id", "")),
+                    "directions": directions,
+                    "tendency_types": sorted(types),
+                    "evidence_event_ids": list(
+                        map(str, item.get("supporting_event_ids", []))
+                    ),
+                    "independent_source_count": int(
+                        item.get("independent_source_count", 0)
+                    ),
+                }
+            )
+        Chinese = bool(re.search(r"[\u4e00-\u9fff]", str(query["query"])))
+        if not dimensions:
+            statement = (
+                (
+                    f"关于{target}，我已有的公开表态不足以形成可靠的总体评价，"
+                    "因此我不会把某一条孤立说法当成完整看法。"
+                )
+                if target and Chinese
+                else (
+                    f"About {target}, my recorded public statements are not enough to form a reliable overall evaluation, "
+                    "so I would not turn a single isolated remark into a full view."
+                )
+                if target
+                else (
+                    "我已有的公开表态不足以形成可靠的总体评价，"
+                    "因此我不会把某一条孤立说法当成完整看法。"
+                )
+                if Chinese
+                else "My recorded public statements are not enough to form a reliable overall evaluation, so I would not turn a single isolated remark into a full view."
+            )
+            return {
+                "stance": "neutral",
+                "statement": statement,
+                "dimensions": [],
+                "evidence_event_ids": [],
+                "support": 0.0,
+                "projection_kind": "object_evaluation_insufficient_evidence",
+                "applicability": "wide_evaluation_insufficient_evaluation_tendencies",
+                "reasons": [],
+                "target": target,
+            }
+        overall_support = 0
+        overall_oppose = 0
+        for dim in dimensions:
+            dirs = dim["directions"]
+            dim["oppose_count"] = int(dirs.count("oppose"))
+            dim["support_count"] = int(dirs.count("support"))
+            dim["mixed_count"] = int(dirs.count("mixed"))
+            dim["stance"] = (
+                "oppose"
+                if dim["oppose_count"] > dim["support_count"]
+                else "support"
+                if dim["support_count"] > dim["oppose_count"]
+                else "mixed"
+            )
+            overall_support += dim["support_count"]
+            overall_oppose += dim["oppose_count"]
+        if overall_oppose > overall_support:
+            stance = "oppose"
+        elif overall_support > overall_oppose:
+            stance = "support"
+        else:
+            stance = "mixed"
+        lines = []
+        for dim in dimensions:
+            label = str(INTERESTS[dim["interest_id"]]["label_zh"]) if Chinese else str(dim["interest_id"]).replace("_", " ")
+            direction_word = {
+                "oppose": "更可能持批评/反对",
+                "support": "更可能持支持",
+                "mixed": "态度混合",
+            }.get(str(dim["stance"]), "态度不明") if Chinese else str(dim["stance"])
+            lines.append(f"{label}：{direction_word}")
+        prefix = f"关于{target}，我基于已记录的公开表态，主要落在几个维度：" if target and Chinese else f"About {target}, based on my recorded public statements, the view falls on several dimensions:" if target else ("我基于已记录的公开表态，主要落在几个维度：" if Chinese else "Based on my recorded public statements, the view falls on several dimensions:")
+        statement = prefix + "\n" + "\n".join(lines) + (
+            "\n\n（这些是历史公开表态，不构成对当前情境的确定预测。）" if Chinese else "\n\n(These are historical public statements, not a determinate prediction for the current situation.)"
+        )
+        return {
+            "stance": stance,
+            "statement": statement,
+            "dimensions": dimensions,
+            "evidence_event_ids": sorted(
+                {eid for dim in dimensions for eid in dim["evidence_event_ids"]}
+            ),
+            "support": 0.0,
+            "projection_kind": "object_evaluation_projection",
+            "applicability": "wide_object_evaluation_from_public_tendencies",
+            "reasons": [],
+            "target": target,
         }
 
     def evaluate(
