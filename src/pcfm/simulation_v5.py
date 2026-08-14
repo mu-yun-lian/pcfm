@@ -55,7 +55,9 @@ def _is_person_opinion_request(text: str) -> bool:
     return bool(
         re.search(
             r"(?:what do you think (?:of|about)|what is your opinion (?:of|on|about)|"
-            r"how do you view|你认为.+怎么样|你怎么看|你的看法|你如何评价)",
+            r"how do you view|do you think you are|do you consider yourself|"
+            r"你认为.+怎么样|你怎么看|你的看法|你如何评价|"
+            r"你认为你是|你认为自己|你觉得自己|你是不是|你算不算)",
             clean,
         )
     )
