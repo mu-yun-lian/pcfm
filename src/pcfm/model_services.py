@@ -582,6 +582,8 @@ class ModelServiceManager:
                 "temperature": float(temperature),
                 "max_tokens": token_limit,
             }
+            # 禁用思考模式（reasoning），避免结构化输出时 reasoning 耗尽 token 导致 content 为空
+            body["thinking"] = {"type": "disabled"}
             if structured and bool(dict(item["capabilities"]).get("structured_output")):
                 body["response_format"] = {"type": "json_object"}
             payload = self._json_request(item, "/chat/completions", method="POST", body=body)

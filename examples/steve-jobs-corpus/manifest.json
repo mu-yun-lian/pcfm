@@ -1,0 +1,27 @@
+{
+  "person": "Steve Jobs",
+  "language": "en",
+  "sources": [
+    {
+      "id": "playboy-1985",
+      "file": "playboy-1985-interview.txt",
+      "date": "1985-02-01",
+      "type": "interview",
+      "url": "https://allaboutstevejobs.com/verbatim/interviews/playboy_1985"
+    },
+    {
+      "id": "stanford-2005",
+      "file": "stanford-2005-commencement.txt",
+      "date": "2005-06-12",
+      "type": "commencement_speech",
+      "url": "https://quartr.com/insights/business-philosophy/steve-jobs-2005-stanford-commencement-speech"
+    },
+    {
+      "id": "iphone-2007",
+      "file": "iphone-2007-macworld-keynote-excerpt.txt",
+      "date": "2007-01-09",
+      "type": "keynote",
+      "url": "https://www.poynter.org/reporting-editing/2015/today-in-media-history-in-2007-we-learned-about-a-handheld-computer-called-the-iphone/"
+    }
+  ]
+}
