@@ -1,0 +1,145 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "tyler-cowen-dual-annotation",
+    "version": "tyler-annotation-v1",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Create two blind, lineage-bound annotation packets from every eligible source candidate; accept only complete signed independent submissions with valid evidence-unit citations; calculate agreement; expose disagreements for human adjudication; and refuse finalization below fixed reliability floors.",
+    "interpretation": "Passing supports only that the annotation workflow is complete, independent by artifact design, internally consistent, replayable, and sufficiently reproducible under the frozen codebook.",
+    "non_claims": [
+      "the labels are psychologically or semantically true",
+      "a public statement equals Tyler Cowen's private belief",
+      "annotator agreement proves construct validity",
+      "the five-axis language is complete",
+      "the resulting records are eligible for training or prospective confirmation"
+    ],
+    "alternatives": [
+      "high agreement is caused by label prevalence rather than codebook clarity",
+      "both annotators share the same systematic attribution error",
+      "the public text is strategic rhetoric or reporting rather than a decision rule",
+      "the true stance lies outside the five registered axes"
+    ],
+    "refusal_state": "Refuse on source mismatch, ineligible or incomplete candidate set, same annotator, cross-slot submission, invalid evidence citation, invalid label shape, bad signature, insufficient agreement, unresolved disagreement, or unregistered future evidence.",
+    "scope": "Tyler Cowen public Marginal Revolution authored-prose units extracted by tyler-source-v1; English public-text annotation; five frozen decision axes; source dates through 2026-07-31; current real packet is retrospective diagnostic only."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Two separately signed full-coverage submissions with no access to each other's labels distinguish procedural reproducibility from one-annotator judgment; exact label agreement, disposition kappa, and explicit adjudication distinguish agreement from unresolved disagreement, but cannot establish truth.",
+    "unidentified_questions": [
+      "whether annotators were actually isolated outside the software",
+      "whether both annotators share the same misconception",
+      "whether Tyler Cowen privately endorses the public statement",
+      "whether omitted context reverses the interpretation",
+      "whether the five axes span the relevant cognitive structure"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "source_extraction",
+      "annotator_a",
+      "annotator_b",
+      "adjudicator",
+      "retrospective_diagnostic",
+      "future_holdout"
+    ],
+    "role_separation": true,
+    "future_holdout": true,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "The software verifies exact packet coverage, signatures, citations, lineage, and calculations. It cannot verify physical annotator isolation, hidden coordination, annotator expertise, upstream archive completeness, or private belief."
+  },
+  "computation": {
+    "deployment_kernel": "One label-validation kernel is used for both annotator submissions and adjudicator resolutions; no predictive deployment kernel exists in this non-predictive module.",
+    "selection_kernel": "Every and only needs_human_annotation source post is selected; no semantic ranking or LLM selection is allowed.",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Exact full-label agreement and Cohen disposition kappa quantify annotator reproducibility only; they exclude construct validity, shared bias, sampling error beyond this packet, and person-model uncertainty.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "future adjudicated dataset builder",
+      "future person-model training eligibility gate"
+    ]
+  },
+  "tests": {
+    "positive_recovery": [
+      "tests/test_tyler_annotation_v1.py::complete independent agreement"
+    ],
+    "null_or_negative_control": [
+      "tests/test_tyler_annotation_v1.py::not-a-stance and out-of-scope remain non-trainable"
+    ],
+    "stable_end_to_end_misspecification": [
+      "tests/test_tyler_annotation_v1.py::shared agreement does not create training eligibility for retrospective data"
+    ],
+    "leakage_or_replay": [
+      "tests/test_tyler_annotation_v1.py::same annotator, wrong slot, incomplete coverage, and cross-packet replay refused"
+    ],
+    "invariance": [
+      "tests/test_tyler_annotation_v1.py::input label order and source post order do not change canonical results"
+    ],
+    "gate_boundary_attack": [
+      "tests/test_tyler_annotation_v1.py::agreement and kappa floors cannot be weakened"
+    ],
+    "report_deployment_equality": [
+      "tests/test_tyler_annotation_v1.py::reported agreement recomputes independently from final labels"
+    ],
+    "scope_and_expiry": [
+      "tests/test_tyler_annotation_v1.py::unregistered future item and non-eligible candidate refused"
+    ],
+    "artifact_recomputation": [
+      "tests/test_tyler_annotation_v1.py::round trip, tamper, old schema, source replay"
+    ],
+    "public_interface": [
+      "tests/test_tyler_annotation_v1.py::CLI produces two blind packets"
+    ],
+    "downstream_integration": [
+      "tests/test_tyler_annotation_v1.py::only adjudicated training-role clear in-scope records are trainable"
+    ],
+    "full_regression": [
+      "tests/test_tyler_annotation_v1.py::full PCFM suite"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "python -m unittest tests.test_tyler_annotation_v1 -v",
+      "python -m unittest discover -s tests -v",
+      "python -m py_compile src/pcfm/tyler_annotation_v1.py src/pcfm/__main__.py src/pcfm/__init__.py"
+    ],
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "13/13 focused Tyler annotation tests passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "223/223 full PCFM regression tests passed in 191.025 seconds"
+      },
+      {
+        "exit_code": 0,
+        "summary": "Python compilation passed for annotation module and public CLI exports"
+      }
+    ]
+  },
+  "remaining_limitations": [
+    "No real human annotation has been collected.",
+    "The current nine real candidates are retrospective diagnostic evidence and are not training eligible.",
+    "Software cannot prove annotators did not communicate.",
+    "Agreement cannot identify shared bias or private belief.",
+    "Inline quotations remain an attribution task for humans."
+  ]
+}

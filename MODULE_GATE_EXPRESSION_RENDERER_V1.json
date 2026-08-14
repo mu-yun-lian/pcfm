@@ -1,0 +1,110 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "pcfm-bounded-expression-renderer",
+    "version": "1.0.0",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Given a frozen structured content contract, produce up to three surface-form candidates while preserving every claim, reason, approved memory, uncertainty, protected entity, number, date, quote, negation, modality, causal direction, confidence, and structured field; select only a passing candidate and otherwise return the neutral rendering.",
+    "interpretation": "surface_expression_transformation_with_structural_semantic_preservation",
+    "non_claims": [
+      "prediction of what Steve Jobs would think or say",
+      "recovery of personality, beliefs, values, memories, or interaction decisions",
+      "free-form role play or identity simulation",
+      "validated human-level semantic equivalence or blind style recognition"
+    ],
+    "alternatives": [
+      "recognizable discourse markers alone explain any style score",
+      "short sentence length rather than person-specific style explains discrimination",
+      "a generic product-presentation register explains the observed surface pattern",
+      "human raters recognize topic leakage rather than style"
+    ],
+    "refusal_state": "invalid_or_unfrozen_contract_or_profile_pollution; candidate-level failure falls back strong to standard to light to neutral",
+    "scope": "English surface rendering for public interview, keynote, and concise email modes using a locally audited Steve Jobs expression package; no direct user question access."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Exact-segment preservation and closed-vocabulary wrappers distinguish surface-only rewriting from content mutation. Person-specific style recognition still requires a preregistered blind human or independent classifier evaluation against other real-person packages.",
+    "unidentified_questions": [
+      "whether the selected surface markers are uniquely attributable to Steve Jobs",
+      "whether independent blind raters can identify the person after names and topics are removed",
+      "whether a future neural renderer preserves semantics beyond exact-segment templates"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "candidate_material_classification",
+      "user_or_developer_reviewed_surface_rule",
+      "sanitized_structure_example",
+      "style_gate_test",
+      "future_blind_style_confirmation"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "Local hashes and locators bind the supplied Nuwa files and approved surface rules. They do not prove the source corpus is complete, that research summaries are correct, or that style is person-unique."
+  },
+  "computation": {
+    "deployment_kernel": "pcfm.expression_renderer.ExpressionRenderer.render",
+    "selection_kernel": "pcfm.expression_renderer.ExpressionRenderer.render",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "The gate proves structural/exact-segment preservation under the bounded templates; it does not provide a learned semantic-entailment probability.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "ProductService frozen content contract API",
+      "local web expression acceptance panel",
+      "saved local render audit records"
+    ]
+  },
+  "tests": {
+    "positive_recovery": ["tests/test_expression_renderer.py::three bounded candidates and selection"],
+    "null_or_negative_control": ["tests/test_expression_renderer.py::empty contract emits no viewpoint"],
+    "stable_end_to_end_misspecification": ["tests/test_expression_renderer.py::contradictory stance remains unchanged"],
+    "leakage_or_replay": ["tests/test_expression_renderer.py::source hash and duplicate audit"],
+    "invariance": ["tests/test_expression_renderer.py::profile swap preserves structured content"],
+    "gate_boundary_attack": ["tests/test_expression_renderer.py::malicious profile and forbidden input rejection"],
+    "report_deployment_equality": ["tests/test_expression_renderer.py::saved checks equal deployment checks"],
+    "scope_and_expiry": ["tests/test_expression_renderer.py::unsupported mode and direct question refusal"],
+    "artifact_recomputation": ["tests/test_expression_renderer.py::profile digest round trip"],
+    "public_interface": ["tests/test_webapp.py::expression render HTTP endpoint"],
+    "downstream_integration": ["tests/test_expression_renderer.py::frozen contract to neutral candidates gate and fallback"],
+    "full_regression": ["tests/test_expression_renderer.py::included in unittest discovery"]
+  },
+  "verification": {
+    "commands": [
+      "$env:PYTHONPATH='src'; python -m unittest tests.test_expression_renderer tests.test_webapp -q",
+      "$env:PYTHONPATH='src'; python -m unittest discover -s tests -p 'test_*.py' -v",
+      "node --check src/pcfm/web_static/app.js",
+      "browser acceptance at http://127.0.0.1:8767/"
+    ],
+    "results": [
+      {"exit_code": 0, "summary": "17 focused expression and HTTP tests passed"},
+      {"exit_code": 0, "summary": "266 full regression tests passed in 205.683 seconds"},
+      {"exit_code": 0, "summary": "JavaScript syntax check passed"},
+      {"exit_code": 0, "summary": "neutral, three candidates, provenance, semantic checks, final selection, and pollution rejection observed; zero browser console warnings/errors"}
+    ]
+  },
+  "remaining_limitations": [
+    "No preregistered blind human or independent classifier evaluation has established Steve Jobs-specific style recognition.",
+    "The semantic gate uses exact locked-segment preservation rather than a validated bidirectional NLI backend.",
+    "The profile is English-only and its source audit includes secondary Nuwa research summaries rather than a complete raw corpus.",
+    "This module does not assess or improve PCFM person-response prediction accuracy."
+  ]
+}

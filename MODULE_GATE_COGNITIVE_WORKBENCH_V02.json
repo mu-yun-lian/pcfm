@@ -1,0 +1,115 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "person-cognitive-workbench",
+    "version": "0.2.0",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Given user-confirmed, source-linked evidence and a user-confirmed structured scenario in one declared domain, compute an auditable option score, evidence-linked drivers, counterfactual flips, unknowns, applicability status, and a separate behavior-baseline comparison.",
+    "interpretation": "evidence_constrained_exploratory_cognitive_score",
+    "non_claims": [
+      "recovered private thoughts",
+      "identified psychological mechanism",
+      "validated person-specific cognitive simulation",
+      "calibrated probability",
+      "generalization outside the declared person, domain, decision type, and time window"
+    ],
+    "alternatives": [
+      "content retrieval alone explains the apparent rationale match",
+      "stable public ideology rather than person-specific reasoning explains the decision",
+      "historical action frequency explains the choice without the rationale structure",
+      "the selected rationale wording is post-hoc or incomplete"
+    ],
+    "refusal_state": "evidence_insufficient_or_scenario_unconfirmed_or_out_of_scope",
+    "scope": "One person, Section 230 platform-liability decisions, two candidate stances, 2019-2023 retrospective demonstration."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Dated first-party actions plus contemporaneous first-person reasons are separated from one sealed retrospective holdout. Product completion does not establish person-specific superiority; that requires future or held-out comparisons against wrong-person, retrieval, behavior, and shuffled-rationale baselines.",
+    "unidentified_questions": [
+      "whether public reasons are complete or sincere",
+      "whether observationally equivalent internal processes generated the same statements",
+      "whether the finite factor vocabulary contains the person's actual reasoning",
+      "whether retrospective performance transfers to future decisions"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "candidate_extraction",
+      "user_confirmed_model_evidence",
+      "applicability_support",
+      "sealed_retrospective_holdout",
+      "post_prediction_outcome"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "Local hashes bind supplied summaries, source locations, reviews, cards, scenarios, and outcomes. They do not prove remote page completeness, publication time, or the sincerity of stated reasons."
+  },
+  "computation": {
+    "deployment_kernel": "pcfm.cognitive_workbench.score_cognitive_scenario",
+    "selection_kernel": "No model or outcome selection; the built-in holdout is fixed by date and excluded from initial evidence.",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Confidence shrinkage reflects confirmed evidence coverage, contested items, and unknown factors; it is not a calibrated statistical interval.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "local web evidence review",
+      "cognitive card generation",
+      "scenario confirmation",
+      "prediction view",
+      "outcome update",
+      "person export and reload"
+    ]
+  },
+  "tests": {
+    "positive_recovery": ["tests/test_cognitive_workbench.py::complete vertical loop"],
+    "null_or_negative_control": ["tests/test_cognitive_workbench.py::unconfirmed evidence excluded"],
+    "stable_end_to_end_misspecification": ["tests/test_cognitive_workbench.py::exploratory completion label"],
+    "leakage_or_replay": ["tests/test_cognitive_workbench.py::duplicate evidence rejection"],
+    "invariance": ["tests/test_cognitive_workbench.py::card item order invariance"],
+    "gate_boundary_attack": ["tests/test_cognitive_workbench.py::real baseline refuses synthetic injection"],
+    "report_deployment_equality": ["tests/test_cognitive_workbench.py::saved prediction kernel check"],
+    "scope_and_expiry": ["tests/test_cognitive_workbench.py::unconfirmed and cross-domain refusal"],
+    "artifact_recomputation": ["tests/test_cognitive_workbench.py::export reload digest verification"],
+    "public_interface": ["tests/test_webapp.py::cognitive HTTP vertical loop"],
+    "downstream_integration": ["tests/test_cognitive_workbench.py::evidence to card to prediction to v2"],
+    "full_regression": ["tests/test_cognitive_workbench.py::included in full unittest discovery"]
+  },
+  "verification": {
+    "commands": [
+      "node --check src/pcfm/web_static/app.js",
+      "python -m unittest tests.test_cognitive_workbench tests.test_product_service tests.test_webapp -v",
+      "python -m unittest discover -s tests",
+      "browser acceptance at http://127.0.0.1:8766"
+    ],
+    "results": [
+      {"exit_code": 0, "summary": "JavaScript syntax and HTML parse passed."},
+      {"exit_code": 0, "summary": "12 focused tests passed in 10.463 seconds."},
+      {"exit_code": 0, "summary": "252 full-regression tests passed in 207.183 seconds."},
+      {"exit_code": 0, "summary": "Five evidence reviews, card v1, confirmed held-out scenario, prediction, external outcome and rationale, and card v2 completed in the local browser."}
+    ]
+  },
+  "remaining_limitations": [
+    "The included case is retrospective and small.",
+    "The cognitive probability is an uncalibrated structured score.",
+    "No wrong-person, retrieval, behavior, or shuffled-rationale advantage is claimed.",
+    "Natural-language structuring is deterministic and domain-specific; an LLM may propose drafts later but cannot bypass confirmation."
+  ]
+}

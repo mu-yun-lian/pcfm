@@ -1,0 +1,20 @@
+{
+  "schema_version": "pcfm-context-modes-v1",
+  "modes": {
+    "interview_public": {
+      "light": ["direct_conversational_open"],
+      "standard": ["direct_conversational_open", "compressed_reason_turn"],
+      "strong": ["explicit_clarity_open", "compressed_reason_turn", "one_more_transition"]
+    },
+    "keynote_public": {
+      "light": ["direct_conversational_open"],
+      "standard": ["explicit_clarity_open", "compressed_reason_turn"],
+      "strong": ["explicit_clarity_open", "compressed_reason_turn", "one_more_transition"]
+    },
+    "concise_email": {
+      "light": ["concise_email_open"],
+      "standard": ["concise_email_open", "email_condition_turn"],
+      "strong": ["concise_email_open", "email_condition_turn", "uncertainty_transition"]
+    }
+  }
+}

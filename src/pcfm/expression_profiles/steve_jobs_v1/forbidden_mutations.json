@@ -1,0 +1,30 @@
+{
+  "schema_version": "pcfm-forbidden-mutations-v1",
+  "mutations": [
+    "add_claim",
+    "add_reason",
+    "add_person_memory",
+    "add_quote",
+    "add_person_or_organization",
+    "add_date_or_number",
+    "change_stance",
+    "reverse_causal_direction",
+    "change_negation",
+    "strengthen_modality",
+    "delete_uncertainty",
+    "change_confidence",
+    "present_inference_as_quote",
+    "correct_contract_using_typical_person_view"
+  ],
+  "forbidden_contract_fields": [
+    "user_question",
+    "raw_user_question",
+    "beliefs",
+    "values",
+    "decision_rules",
+    "person_timeline",
+    "latest_updates",
+    "relationship_facts"
+  ],
+  "fallback_order": ["strong", "standard", "light", "neutral"]
+}

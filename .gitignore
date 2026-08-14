@@ -1,0 +1,34 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# ---- 日志与进程文件 ----
+*.log
+*.pid
+
+# ---- 密钥 / 凭据（本仓库存在 secrets.dpapi.json）----
+*.dpapi.json
+*.pem
+*.key
+*.p12
+
+# ---- 运行时 / 可再生成产物（实验输出、原始语料、模型、账本、截图、日志）----
+/artifacts/
+
+# ---- 临时工作文件 ----
+/tmp/
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

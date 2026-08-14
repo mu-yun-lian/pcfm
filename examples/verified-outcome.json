@@ -1,0 +1,13 @@
+{
+  "person_id": "P001",
+  "scenario": {
+    "scenario_id": "future-001",
+    "features": {"reward": 0.7, "risk": -0.5, "control": 0.9},
+    "options": ["A", "B"],
+    "domain": "example"
+  },
+  "actual_choice": 1,
+  "provenance": "human_record",
+  "confidence": 0.8,
+  "reaction_time_ms": 1550
+}

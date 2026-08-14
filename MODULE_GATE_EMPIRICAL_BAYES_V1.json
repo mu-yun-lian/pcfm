@@ -1,0 +1,150 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "anisotropic-empirical-bayes-adapter",
+    "version": "anisotropic-empirical-bayes-adapter-v1",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Test whether a noise-corrected anisotropic population covariance improves held-out synthetic-person logistic MAP NLL over the fixed isotropic personal MAP baseline.",
+    "interpretation": "synthetic_anisotropic_population_prior_adaptation",
+    "non_claims": [
+      "Covariance axes are beliefs, values, personality, or cognitive mechanisms.",
+      "Synthetic improvement transfers to real people.",
+      "Predictive improvement identifies causal psychology."
+    ],
+    "alternatives": [
+      "Fixed isotropic personal MAP is sufficient.",
+      "Estimated covariance is meta-person sampling noise.",
+      "Any gain is validation/test leakage or wrong-person support.",
+      "Linear-family gain disappears under stable misspecification."
+    ],
+    "refusal_state": "rejected_candidate",
+    "scope": "Synthetic unseen people, one five-feature binary-choice task, support sizes 0/16/32/64, scenario confirmation, temporal secondary check, OOD diagnostic only."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Previously unseen audit seeds, disjoint person roles, support-only adaptation, wrong-person EB control, null heterogeneity, and stable nonlinear misspecification control.",
+    "unidentified_questions": [
+      "Real-person external validity.",
+      "Psychological meaning of covariance directions.",
+      "Whether the upstream collector disclosed every trial.",
+      "Observationally equivalent internal processes."
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "meta-training covariance estimation",
+      "validation shrinkage selection",
+      "test-person support adaptation",
+      "sealed scenario confirmation",
+      "temporal secondary evaluation",
+      "OOD diagnostic"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "Synthetic generator completeness only; real evidence requires an external registry and trusted chronology."
+  },
+  "computation": {
+    "deployment_kernel": "Anisotropic MAP produces a LogisticChoiceModel and all reporting uses LogisticChoiceModel.probabilities.",
+    "selection_kernel": "Validation selects only one fixed covariance-shrinkage coefficient from 0/.25/.5/.75/1.",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Five-seed paired NLL audit plus null and misspecification controls; no real-person interval.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": false,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": false
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "Python artifact and benchmark API",
+      "empirical-bayes-v1 CLI",
+      "fixed unseen-seed audit"
+    ]
+  },
+  "tests": {
+    "positive_recovery": [
+      "tests/test_empirical_bayes_v1.py::test_adapter_recovers_person_specific_signal"
+    ],
+    "null_or_negative_control": [
+      "tests/test_empirical_bayes_v1.py::test_zero_heterogeneity_does_not_manufacture_gain"
+    ],
+    "stable_end_to_end_misspecification": [
+      "tests/test_empirical_bayes_v1.py::test_stable_misspecification_is_not_confirmed"
+    ],
+    "leakage_or_replay": [
+      "tests/test_empirical_bayes_v1.py::test_heldout_answers_cannot_change_prior_artifact",
+      "tests/test_empirical_bayes_v1.py::test_near_duplicate_support_cannot_be_relabelled",
+      "tests/test_empirical_bayes_v1.py::test_ood_outcomes_do_not_change_acceptance"
+    ],
+    "invariance": [
+      "tests/test_empirical_bayes_v1.py::test_support_order_and_identifier_renaming_do_not_matter"
+    ],
+    "gate_boundary_attack": [
+      "tests/test_empirical_bayes_v1.py::test_configuration_gates_cannot_be_weakened"
+    ],
+    "report_deployment_equality": [
+      "tests/test_empirical_bayes_v1.py::test_report_metrics_are_recalculated"
+    ],
+    "scope_and_expiry": [
+      "tests/test_empirical_bayes_v1.py::test_cross_domain_support_is_refused"
+    ],
+    "artifact_recomputation": [
+      "tests/test_empirical_bayes_v1.py::test_artifact_round_trip_tamper_and_recomputation"
+    ],
+    "public_interface": [
+      "tests/test_empirical_bayes_v1.py::test_cli_runs_fixed_unseen_seed_audit"
+    ],
+    "downstream_integration": [
+      "tests/test_empirical_bayes_v1.py::test_five_seed_audit_uses_all_final_gates"
+    ],
+    "full_regression": [
+      "tests/test_empirical_bayes_v1.py::test_full_regression_is_documented"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "python -m compileall -q src tests",
+      "python -m unittest discover -s tests -p \"test_empirical_bayes_v1.py\" -v",
+      "python -m unittest discover -s tests -v",
+      "python C:/Users/14013/.codex/skills/build-falsifiable-cognitive-modules/scripts/module_gate.py check MODULE_GATE_EMPIRICAL_BAYES_V1.json --repo-root ."
+    ],
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "python -m compileall -q src tests passed."
+      },
+      {
+        "exit_code": 0,
+        "summary": "17/17 focused empirical-Bayes tests passed in 21.079s after hostile-audit repair."
+      },
+      {
+        "exit_code": 0,
+        "summary": "183/183 full regression tests passed in 271.131s."
+      },
+      {
+        "exit_code": 1,
+        "summary": "Gate audit is expected to refuse confirmatory status: the module is exploratory and lacks real future holdout, global/local applicability, and temporal expiry evidence."
+      }
+    ]
+  },
+  "remaining_limitations": [
+    "Synthetic single-domain evidence only.",
+    "No real trial registry, trusted timestamps, or external signature.",
+    "No psychological or causal semantics.",
+    "Real-person applicability and expiry are not established.",
+    "Candidate must be rejected if preregistered comparative gates fail."
+  ]
+}

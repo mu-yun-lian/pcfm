@@ -1,0 +1,14 @@
+# 文本文件统一 LF，避免 Windows 换行噪声
+* text=auto eol=lf
+
+# 二进制文件不转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text
+*.pdf binary
+*.xlsx binary
+*.zip binary
+*.pyc binary
+*.jsonl text

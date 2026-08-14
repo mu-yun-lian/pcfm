@@ -1,0 +1,218 @@
+{
+  "schema_version": "pcfm-cognitive-case-v1",
+  "person": {
+    "person_id": "josh-hawley-section230",
+    "name": "Josh Hawley：Section 230 责任边界",
+    "description": "真实材料纵向案例。范围仅限大型技术平台的 Section 230 责任与用户救济，不代表通用人物思维模型。",
+    "domain": "section_230_platform_liability",
+    "decision_type": "support_narrowing_section230_immunity",
+    "option_a": "反对缩减或取消豁免",
+    "option_b": "支持有条件缩减或取消豁免",
+    "evidence_window": {
+      "start": "2019-06-19",
+      "end": "2022-12-07"
+    },
+    "suggested_scenario_text": "Should Congress remove Section 230 immunity for claims arising from generative AI output produced by large technology companies, so harmed users and parents can sue?",
+    "suggested_prediction_at": "2023-06-20T12:00:00Z",
+    "holdout_notice": "2023-12-13 的 No Section 230 Immunity for AI Act 行动与同期理由仅用于预测后的真实结果回填，未进入初始证据库。"
+  },
+  "factor_definitions": [
+    {
+      "name": "large_platform_power",
+      "label": "是否涉及大型平台及其权力",
+      "description": "0 表示小型主体，1 表示大型或支配性技术平台。",
+      "default": 0.5,
+      "high_impact": true,
+      "positive_keywords": ["big tech", "large technology", "large platform", "dominant platform", "huge companies", "大型平台", "科技巨头"],
+      "negative_keywords": ["small company", "small platform", "small business", "小型平台", "小企业"]
+    },
+    {
+      "name": "documented_or_alleged_harm",
+      "label": "是否存在具体伤害或违法内容",
+      "description": "0 表示未指出具体伤害，1 表示有明确的人身、精神、隐私或违法内容伤害。",
+      "default": 0.5,
+      "high_impact": true,
+      "positive_keywords": ["harm", "harmful", "illegal", "unlawful", "injury", "abuse", "伤害", "违法"],
+      "negative_keywords": ["no harm", "无伤害"]
+    },
+    {
+      "name": "child_or_vulnerable_harm",
+      "label": "是否涉及儿童或弱势群体",
+      "description": "0 表示不涉及，1 表示直接涉及儿童、父母或明显弱势受害者。",
+      "default": 0.0,
+      "high_impact": true,
+      "positive_keywords": ["child", "children", "parent", "parents", "minor", "儿童", "父母", "未成年人"],
+      "negative_keywords": []
+    },
+    {
+      "name": "political_censorship_or_discrimination",
+      "label": "是否涉及审查或歧视性执行",
+      "description": "0 表示无此问题，1 表示明确涉及政治审查、歧视或不透明执行。",
+      "default": 0.0,
+      "high_impact": false,
+      "positive_keywords": ["censor", "censorship", "discrimination", "politically neutral", "审查", "歧视"],
+      "negative_keywords": []
+    },
+    {
+      "name": "user_legal_recouse_gap",
+      "label": "受影响者是否缺少法律救济",
+      "description": "0 表示已有充分救济，1 表示用户或受害者因豁免难以起诉。",
+      "default": 0.5,
+      "high_impact": true,
+      "positive_keywords": ["sue", "court", "liable", "liability", "recourse", "day in court", "起诉", "法院", "追责", "救济"],
+      "negative_keywords": ["already compensated", "已有救济"]
+    },
+    {
+      "name": "good_faith_or_transparency_safeguard",
+      "label": "方案是否保留善意或透明度条件",
+      "description": "0 表示无条件取消，1 表示通过审计、善意义务或透明度条件保留有限豁免。",
+      "default": 0.0,
+      "high_impact": false,
+      "positive_keywords": ["audit", "good faith", "transparency", "neutral", "审计", "善意", "透明"],
+      "negative_keywords": ["blanket removal", "全面取消"]
+    },
+    {
+      "name": "small_firm_or_innovation_cost",
+      "label": "是否可能给小型主体或创新造成广泛负担",
+      "description": "0 表示范围窄且排除小型主体，1 表示广泛覆盖小型主体或创新活动。",
+      "default": 0.5,
+      "high_impact": true,
+      "positive_keywords": ["all companies", "small companies", "small platform", "innovation burden", "所有公司", "小型平台", "创新负担"],
+      "negative_keywords": ["large companies only", "big tech only", "only large", "仅大型平台", "排除小企业"]
+    },
+    {
+      "name": "targeted_scope",
+      "label": "责任规则是否针对特定行为或伤害",
+      "description": "0 表示笼统全面，1 表示仅针对特定行为、内容或可诉损害。",
+      "default": 0.5,
+      "high_impact": false,
+      "positive_keywords": ["claims arising", "specific harm", "behavioral ads", "recommendation", "generative ai", "特定伤害", "生成式人工智能"],
+      "negative_keywords": ["all content", "全面责任"]
+    }
+  ],
+  "unknown_templates": [
+    {
+      "item_id": "unknown_innovation_tradeoff",
+      "category": "unknowns",
+      "statement": "现有材料不足以确定他在责任规则显著抑制小型创新者时会接受多大代价。",
+      "status": "unknown",
+      "evidence_ids": ["hawley-2019-neutrality", "hawley-2020-good-faith"],
+      "confidence": 0.35
+    },
+    {
+      "item_id": "unknown_causation_threshold",
+      "category": "unknowns",
+      "statement": "现有材料不足以确定他要求多强的因果证明才支持平台承担责任。",
+      "status": "unknown",
+      "evidence_ids": ["hawley-2021-child-harm", "hawley-2022-gonzalez"],
+      "confidence": 0.3
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "hawley-2019-neutrality",
+      "text": "Hawley introduced a bill that would remove automatic Section 230 immunity from large technology companies unless an external audit showed politically neutral algorithms and moderation; small and medium firms were excluded.",
+      "source": "https://www.hawley.senate.gov/senator-hawley-introduces-legislation-amend-section-230-immunity-big-tech-companies/",
+      "source_title": "Senator Hawley Introduces Legislation to Amend Section 230 Immunity for Big Tech Companies",
+      "date": "2019-06-19",
+      "context": "Introduction of the Ending Support for Internet Censorship Act.",
+      "position": "Support conditional removal of immunity for large platforms.",
+      "explicit_rationale": "Large platforms receive exceptional protection while their moderation is opaque and may discriminate politically.",
+      "role": "person_self_report",
+      "domain": "section_230_platform_liability",
+      "is_conflicting": false,
+      "confidence": 0.92,
+      "source_locator": "dated press release, paragraphs 1-4 and bill summary bullets",
+      "extraction_method": "curated_summary_candidate",
+      "candidate_model_items": [
+        {"item_id": "belief_platform_power_requires_accountability", "category": "beliefs", "statement": "Large technology platforms possess exceptional information power and should not receive immunity without accountability.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"large_platform_power": 1.0}},
+        {"item_id": "value_accountability_and_transparency", "category": "values", "statement": "Accountability and transparent, non-discriminatory moderation outrank preserving automatic immunity for dominant platforms.", "status": "observed", "decision_weight": 0.9, "factor_weights": {"large_platform_power": 0.6, "political_censorship_or_discrimination": 1.0, "good_faith_or_transparency_safeguard": 0.4}},
+        {"item_id": "rule_conditional_immunity_large_platform", "category": "decision_rules", "statement": "When a platform is large and cannot demonstrate neutral, transparent moderation, favor conditioning or removing Section 230 immunity.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"large_platform_power": 0.8, "political_censorship_or_discrimination": 0.8, "good_faith_or_transparency_safeguard": 0.3}},
+        {"item_id": "risk_small_firm_scope", "category": "risk_preferences", "statement": "Avoid imposing the same Section 230 burden on small and medium platforms without evidence of comparable power.", "status": "inferred", "decision_weight": -0.8, "factor_weights": {"small_firm_or_innovation_cost": 1.0}}
+      ]
+    },
+    {
+      "evidence_id": "hawley-2020-good-faith",
+      "text": "Hawley introduced a proposal requiring major platforms to accept a contractual duty of good faith as a condition of Section 230 immunity and allowing users to sue for discriminatory enforcement or broken promises.",
+      "source": "https://www.hawley.senate.gov/senator-hawley-announces-bill-empowering-americans-sue-big-tech-companies-acting-bad-faith/",
+      "source_title": "Senator Hawley Announces Bill Empowering Americans to Sue Big Tech Companies Acting in Bad Faith",
+      "date": "2020-06-17",
+      "context": "Introduction of the Limiting Section 230 Immunity to Good Samaritans Act.",
+      "position": "Support conditional immunity and a private remedy against major platforms.",
+      "explicit_rationale": "Courts had expanded Section 230 while users lacked recourse against discriminatory censorship.",
+      "role": "person_self_report",
+      "domain": "section_230_platform_liability",
+      "is_conflicting": false,
+      "confidence": 0.93,
+      "source_locator": "dated press release, opening paragraphs and background bullets",
+      "extraction_method": "curated_summary_candidate",
+      "candidate_model_items": [
+        {"item_id": "belief_courts_expanded_immunity", "category": "beliefs", "statement": "Courts have expanded Section 230 beyond a defensible accountability boundary for major platforms.", "status": "observed", "decision_weight": 0.8, "factor_weights": {"large_platform_power": 0.5, "user_legal_recouse_gap": 0.8}},
+        {"item_id": "value_user_legal_recouse", "category": "values", "statement": "Users should retain a practical legal remedy when a major platform acts in bad faith.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"user_legal_recouse_gap": 1.0}},
+        {"item_id": "rule_bad_faith_condition", "category": "decision_rules", "statement": "If a major platform acts inconsistently or discriminatorily, support conditioning immunity on good faith and allowing suit.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"large_platform_power": 0.5, "political_censorship_or_discrimination": 0.8, "user_legal_recouse_gap": 0.7, "good_faith_or_transparency_safeguard": 0.4}}
+      ]
+    },
+    {
+      "evidence_id": "hawley-2020-bad-ads",
+      "text": "Hawley announced legislation removing Section 230 immunity from large platforms using behavioral advertising based on invasive tracking and manipulative design.",
+      "source": "https://www.hawley.senate.gov/senator-hawley-introduces-bill-remove-section-230-immunity-behavioral-advertisers/",
+      "source_title": "Senator Hawley Introduces Bill to Remove Section 230 Immunity from Behavioral Advertisers",
+      "date": "2020-07-28",
+      "context": "Announcement of the BAD ADS Act.",
+      "position": "Support removing immunity for manipulative behavioral advertising.",
+      "explicit_rationale": "The advertising model creates privacy, child-harm, manipulation, and speech costs not contemplated when Section 230 was enacted.",
+      "role": "person_self_report",
+      "domain": "section_230_platform_liability",
+      "is_conflicting": false,
+      "confidence": 0.9,
+      "source_locator": "dated press release, paragraphs 1-3",
+      "extraction_method": "curated_summary_candidate",
+      "candidate_model_items": [
+        {"item_id": "causal_immunity_enables_manipulation", "category": "causal_assumptions", "statement": "Broad immunity can let surveillance-based manipulation and its harms persist without adequate correction.", "status": "inferred", "decision_weight": 0.8, "factor_weights": {"documented_or_alleged_harm": 0.7, "user_legal_recouse_gap": 0.5, "targeted_scope": 0.5}},
+        {"item_id": "risk_precaution_for_hidden_harm", "category": "risk_preferences", "statement": "When platform practices create hidden privacy or child harms, favor earlier accountability rather than waiting for complete damage measurement.", "status": "inferred", "decision_weight": 0.75, "factor_weights": {"documented_or_alleged_harm": 0.7, "child_or_vulnerable_harm": 0.8}}
+      ]
+    },
+    {
+      "evidence_id": "hawley-2021-child-harm",
+      "text": "Hawley introduced legislation allowing parents to sue social-media companies for bodily or mental harm to users under sixteen and proposed closing the relevant Section 230 protection.",
+      "source": "https://www.hawley.senate.gov/hawley-bill-allow-parents-sue-big-tech-harm-children/",
+      "source_title": "Hawley Bill to Allow Parents to Sue Big Tech for Harm to Children",
+      "date": "2021-09-30",
+      "context": "Bill responding to reported internal knowledge of harms to children.",
+      "position": "Support liability and parental legal action for child harm.",
+      "explicit_rationale": "Platforms allegedly knew of addictive and harmful effects on children while parents lacked tools to respond.",
+      "role": "person_self_report",
+      "domain": "section_230_platform_liability",
+      "is_conflicting": false,
+      "confidence": 0.94,
+      "source_locator": "dated press release, paragraphs 1-3",
+      "extraction_method": "curated_summary_candidate",
+      "candidate_model_items": [
+        {"item_id": "belief_platforms_may_know_child_harm", "category": "beliefs", "statement": "Large platforms may know about serious product harms to children while maintaining profitable practices.", "status": "observed", "decision_weight": 0.9, "factor_weights": {"large_platform_power": 0.4, "documented_or_alleged_harm": 0.7, "child_or_vulnerable_harm": 1.0}},
+        {"item_id": "value_parental_control_and_child_protection", "category": "values", "statement": "Protecting children and giving parents practical control outweigh blanket platform immunity in child-harm cases.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"child_or_vulnerable_harm": 1.0, "user_legal_recouse_gap": 0.8}},
+        {"item_id": "rule_child_harm_liability", "category": "decision_rules", "statement": "When a platform is linked to concrete harm to minors, support a targeted cause of action and reduced immunity.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"documented_or_alleged_harm": 0.8, "child_or_vulnerable_harm": 1.0, "user_legal_recouse_gap": 0.7, "targeted_scope": 0.5}}
+      ]
+    },
+    {
+      "evidence_id": "hawley-2022-gonzalez",
+      "text": "Hawley filed an amicus brief arguing that Section 230 should not shield a platform's knowing distribution or recommendation of unlawful content and supported liability for recommendation decisions.",
+      "source": "https://www.hawley.senate.gov/hawley-files-gonzalez-v-google-amicus-brief-supreme-court-challenging-big-techs-section-230/",
+      "source_title": "Hawley Files Gonzalez v. Google Amicus Brief with Supreme Court",
+      "date": "2022-12-07",
+      "context": "Gonzalez v. Google amicus filing concerning algorithmic recommendations.",
+      "position": "Support liability for knowing recommendation of unlawful content.",
+      "explicit_rationale": "He argued courts misread the statute and that the original law did not grant immunity for knowingly distributing unlawful material.",
+      "role": "person_self_report",
+      "domain": "section_230_platform_liability",
+      "is_conflicting": false,
+      "confidence": 0.95,
+      "source_locator": "dated press release, paragraphs 1-5 and linked amicus brief",
+      "extraction_method": "curated_summary_candidate",
+      "candidate_model_items": [
+        {"item_id": "belief_original_meaning_narrower", "category": "beliefs", "statement": "The original meaning of Section 230 does not protect knowing platform distribution of unlawful material.", "status": "observed", "decision_weight": 0.9, "factor_weights": {"documented_or_alleged_harm": 0.8, "targeted_scope": 0.5}},
+        {"item_id": "causal_immunity_blocks_accountability", "category": "causal_assumptions", "statement": "Treating Section 230 as a blanket shield prevents accountability for recommendation-driven harm.", "status": "observed", "decision_weight": 0.9, "factor_weights": {"documented_or_alleged_harm": 0.7, "user_legal_recouse_gap": 0.8}},
+        {"item_id": "rule_known_unlawful_recommendation", "category": "decision_rules", "statement": "When a platform knowingly recommends unlawful content, support ordinary liability rather than Section 230 immunity.", "status": "observed", "decision_weight": 1.0, "factor_weights": {"documented_or_alleged_harm": 1.0, "large_platform_power": 0.4, "targeted_scope": 0.6}}
+      ]
+    }
+  ]
+}

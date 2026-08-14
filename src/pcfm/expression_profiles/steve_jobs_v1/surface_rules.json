@@ -1,0 +1,68 @@
+{
+  "schema_version": "pcfm-surface-rules-v1",
+  "rules": [
+    {
+      "rule_id": "direct_conversational_open",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_claim",
+      "prefix": "Here’s the point: ",
+      "style_weight": 0.18,
+      "provenance_ids": ["prov-oral-register", "prov-direct-opening"]
+    },
+    {
+      "rule_id": "compressed_reason_turn",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_reason",
+      "prefix": "Why? ",
+      "style_weight": 0.16,
+      "provenance_ids": ["prov-short-rhythm"]
+    },
+    {
+      "rule_id": "explicit_clarity_open",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_claim",
+      "prefix": "Let’s be clear: ",
+      "style_weight": 0.24,
+      "provenance_ids": ["prov-direct-opening", "prov-short-rhythm"]
+    },
+    {
+      "rule_id": "uncertainty_transition",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_uncertainty",
+      "prefix": "One uncertainty remains: ",
+      "style_weight": 0.12,
+      "provenance_ids": ["prov-rhythm-transition"]
+    },
+    {
+      "rule_id": "one_more_transition",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_uncertainty",
+      "prefix": "And one more thing: ",
+      "style_weight": 0.28,
+      "provenance_ids": ["prov-one-more-thing"]
+    },
+    {
+      "rule_id": "concise_email_open",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_claim",
+      "prefix": "Quick answer: ",
+      "style_weight": 0.14,
+      "provenance_ids": ["prov-email-brevity"]
+    },
+    {
+      "rule_id": "email_condition_turn",
+      "category": "A_surface",
+      "review_status": "confirmed",
+      "operation": "prefix_first_reason",
+      "prefix": "The reason: ",
+      "style_weight": 0.12,
+      "provenance_ids": ["prov-email-brevity"]
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "decision-context-rationale-evidence",
+    "version": "v1",
+    "status": "implemented_unintegrated"
+  },
+  "claim": {
+    "operational_target": "Create and independently verify a signed bundle in which every observed choice is linked to pre-choice context and either a same-person contemporaneous rationale or a verifiable consequence, with immutable evidence roles and recomputable source content.",
+    "interpretation": "Success supports only decision_context_explanation_linkage_contract_satisfied for the supplied bytes and declared timestamps.",
+    "non_claims": [
+      "belief identification",
+      "value identification",
+      "goal identification",
+      "reason sincerity or causal sufficiency",
+      "stable person-model validity",
+      "general person simulation"
+    ],
+    "alternatives": [
+      "public explanation is post-hoc or strategic",
+      "shared institution, incentive, or recent state explains later utility",
+      "topic or phrase repetition explains later utility",
+      "the supplied corpus omits contradictory evidence",
+      "any useful signal is domain-specific and non-transferable"
+    ],
+    "refusal_state": "decision_evidence_refused",
+    "scope": "Binary or multi-option human decisions with full text context, timezone-aware source timestamps, official or human primary snapshots, and one of seven frozen evidence roles; no automatic training or semantic interpretation."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Offline recomputation checks exact source content, links, attribution, timing, role separation, replay, near-duplicates, schema identity, bundle identity, and signature identity. A future model experiment must separately test incremental predictive utility against shared-dynamic, wrong-person, history-only, and content-only controls on sealed later records.",
+    "unidentified_questions": [
+      "Whether upstream collectors disclosed every relevant source",
+      "Whether remote publication timestamps are truthful",
+      "Whether a rationale reports the process that caused the decision",
+      "Whether the evidence transfers beyond the declared person, task, domain, options, context, and time"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "candidate_discovery",
+      "parameter_fitting",
+      "applicability_calibration",
+      "candidate_selection",
+      "sealed_confirmation",
+      "post_deployment_monitoring",
+      "external_utility_evaluation"
+    ],
+    "role_separation": true,
+    "future_holdout": true,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "Local content and HMAC digests prove only supplied-byte integrity, declared linkage, and declared role allocation. Corpus completeness, independent publication time, authorship truth, and rationale sincerity require an external archive, registry, or human audit."
+  },
+  "computation": {
+    "deployment_kernel": "One validate_decision_evidence_bundle admission kernel recomputes source, record, artifact, timing, attribution, role, replay, and signature gates before every load or public use.",
+    "selection_kernel": "Bundle creation invokes the identical validation kernel before signing; the CLI and round-trip loader invoke it again without a separate formula.",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "No predictive uncertainty is claimed. Validation covers deterministic supplied-byte and declared-metadata checks only and explicitly excludes source completeness, authorship truth, timestamp truth, sincerity, and causal interpretation.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "decision-evidence-build-v1 CLI",
+      "decision-evidence-verify-v1 CLI",
+      "round-trip artifact loader",
+      "future frozen model experiments only; current fit, update, and semantic paths remain blocked"
+    ]
+  },
+  "tests": {
+    "positive_recovery": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_valid_rationale_and_consequence_records_pass"],
+    "null_or_negative_control": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_missing_explanation_or_choice_is_refused"],
+    "stable_end_to_end_misspecification": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_contract_does_not_promote_semantic_or_training_status"],
+    "leakage_or_replay": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_cross_role_replay_and_near_duplicate_are_refused"],
+    "invariance": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_input_order_and_identifier_renaming_are_invariant"],
+    "gate_boundary_attack": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_timing_authorship_provenance_and_hard_ceiling_attacks"],
+    "report_deployment_equality": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_creation_load_and_verify_share_one_admission_result"],
+    "scope_and_expiry": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_person_domain_task_option_and_time_scope_are_bound"],
+    "artifact_recomputation": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_round_trip_tamper_and_resign_recomputation"],
+    "public_interface": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_cli_build_and_verify"],
+    "downstream_integration": ["tests/test_decision_evidence_v1.py::DecisionEvidenceV1Tests.test_existing_model_registry_and_fit_paths_are_unchanged"],
+    "full_regression": ["tests/test_closed_loop.py::ClosedLoopTests"]
+  },
+  "verification": {
+    "commands": [
+      "python -m unittest tests.test_decision_evidence_v1 -v",
+      "python -m unittest discover -s tests -v",
+      "powershell -NoProfile -File work/decision-evidence-v1/verify_gate.ps1"
+    ],
+    "results": [
+      {"exit_code": 0, "summary": "11 focused decision evidence tests passed"},
+      {"exit_code": 0, "summary": "240 production and decision evidence regression tests passed in 200.991 seconds"},
+      {"exit_code": 0, "summary": "wrapper confirmed the completion gate refuses confirmatory status only because this evidence contract is intentionally implemented_unintegrated"}
+    ]
+  },
+  "remaining_limitations": [
+    "No real decision evidence bundle has been collected",
+    "No model consumes this bundle in v1",
+    "Source completeness and timestamp truth need an external registry or archive",
+    "Rationale sincerity and causal sufficiency are structurally unidentified",
+    "Predictive utility remains untested"
+  ]
+}

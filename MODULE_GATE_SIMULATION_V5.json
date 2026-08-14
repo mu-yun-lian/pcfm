@@ -1,0 +1,146 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "conversation_conditioned_response_simulation",
+    "version": "5",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Select an auditable next-response content plan from reviewed public episodes, full conversation state, and a validated semantic query candidate.",
+    "interpretation": "Observable public-response projection only.",
+    "non_claims": [
+      "private belief or motive identification",
+      "calibrated real-person prediction accuracy",
+      "language-model semantic candidates as factual truth"
+    ],
+    "alternatives": [
+      "generic model prior",
+      "nearest-event copying",
+      "topic overlap rather than person specificity",
+      "mechanically cut source span mistaken for an episode"
+    ],
+    "refusal_state": "clarification_needed or no_person_projection",
+    "scope": "One versioned person, public response episodes, ordinary multi-turn text conversation, declared time and relationship scope."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Time- and lineage-separated whole-conversation holdouts against current-message-only, wrong-person, shuffled-history, retrieval-only, and generic-model baselines.",
+    "unidentified_questions": [
+      "private sincerity",
+      "complete real-person knowledge",
+      "accuracy outside observed public contexts"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "candidate_discovery",
+      "parameter_fitting",
+      "applicability_calibration",
+      "sealed_temporal_holdout",
+      "reality_comparison",
+      "post_deployment_monitoring"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "Hashes verify supplied bytes and lineage, not source completeness or truth of metadata."
+  },
+  "computation": {
+    "deployment_kernel": "SimulationKernelV5.predict",
+    "selection_kernel": "SimulationKernelV5.predict",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Evidence, semantic mapping, context resolution, temporal transfer, local support, and model-form uncertainty; not a calibrated accuracy interval.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "ConversationWorkbench.send_message",
+      "reality comparison",
+      "optimization holdout evaluation",
+      "person export and summary"
+    ]
+  },
+  "tests": {
+    "positive_recovery": [
+      "tests/test_simulation_v5.py::SimulationV5Tests.test_current_message_is_a_delta_to_selected_prior_topic"
+    ],
+    "null_or_negative_control": [
+      "tests/test_conversation_mvp.py::ConversationMVPTests.test_no_source_and_unmatched_question_do_not_invent_person_stance"
+    ],
+    "stable_end_to_end_misspecification": [
+      "tests/test_prediction_layer_target_v1.py::PredictionLayerTargetTests.test_real_people_holdouts_report_baselines_without_accuracy_claim"
+    ],
+    "leakage_or_replay": [
+      "tests/test_response_prediction_v1.py::ResponsePredictionV1Tests.test_multiturn_history_changes_context_and_generated_reply_is_not_evidence"
+    ],
+    "invariance": [
+      "tests/test_response_prediction_v1.py::ResponsePredictionV1Tests.test_reordering_sources_does_not_change_deployed_prediction"
+    ],
+    "gate_boundary_attack": [
+      "tests/test_simulation_v5.py::SimulationV5Tests.test_model_cannot_attach_unseen_value_spans_to_an_unrelated_question"
+    ],
+    "report_deployment_equality": [
+      "tests/test_response_prediction_v1.py::ResponsePredictionV1Tests.test_same_kernel_exposes_correct_population_retrieval_and_frequency_baselines"
+    ],
+    "scope_and_expiry": [
+      "tests/test_prediction_layer_target_v1.py::PredictionLayerTargetTests.test_missing_time_is_explicit_and_cannot_train_or_form_tendency"
+    ],
+    "artifact_recomputation": [
+      "tests/test_response_prediction_v1.py::ResponsePredictionV1Tests.test_model_artifact_tampering_is_refused_before_chat_prediction"
+    ],
+    "public_interface": [
+      "tests/test_webapp.py::WebAppTests.test_static_page_health_and_full_http_closed_loop"
+    ],
+    "downstream_integration": [
+      "tests/test_simulation_v5.py::SimulationV5ProductIntegrationTests.test_product_uses_semantic_model_before_general_fallback"
+    ],
+    "full_regression": [
+      "tests/test_simulation_v5.py::full suite includes V5 regression coverage"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "PYTHONPATH=src python -m unittest discover -s tests -v",
+      "PYTHONPATH=src python -m compileall -q src tests",
+      "node --check src/pcfm/web_static/app.js",
+      "in-app Browser acceptance against http://127.0.0.1:8877/ with isolated temporary runtime"
+    ],
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "379 tests passed in 303.648 seconds"
+      },
+      {
+        "exit_code": 0,
+        "summary": "Python compileall passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "JavaScript syntax check passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "V5 health, demo loading, corrected recommended-question click-through, historical direct-evidence answer, and empty page error log verified"
+      }
+    ]
+  },
+  "remaining_limitations": [
+    "Real-person accuracy has no adequate independent full-conversation holdout.",
+    "Semantic scenario mapping by a language model is bounded but not provably correct.",
+    "Public material cannot identify private mental state."
+  ]
+}

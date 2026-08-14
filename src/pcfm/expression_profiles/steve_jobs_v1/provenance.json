@@ -1,0 +1,61 @@
+{
+  "schema_version": "pcfm-style-provenance-v1",
+  "entries": [
+    {
+      "provenance_id": "prov-one-more-thing",
+      "source": "references/research/03-expression-dna.md",
+      "source_locator": "lines 10-19",
+      "source_url": "https://www.macworld.com/article/669636/watch-every-steve-jobs-one-more-thing.html",
+      "classification": "A_surface",
+      "classification_reason": "surface transition and ending device only; no associated product claim is retained",
+      "review_status": "confirmed"
+    },
+    {
+      "provenance_id": "prov-oral-register",
+      "source": "references/research/03-expression-dna.md",
+      "source_locator": "lines 21-25",
+      "source_url": "http://www.european-rhetoric.com/analyses/ikeynote-analysis-iphone/steve-jobs-figures-speech/",
+      "classification": "A_surface",
+      "classification_reason": "observable conversational vocabulary and register",
+      "review_status": "confirmed"
+    },
+    {
+      "provenance_id": "prov-short-rhythm",
+      "source": "references/research/03-expression-dna.md",
+      "source_locator": "lines 97-113",
+      "source_url": "https://allaboutstevejobs.com/verbatim/interviews/d5_conference_steve_2007",
+      "classification": "A_surface",
+      "classification_reason": "pause, repetition, and short transition rhythm with all topic content removed",
+      "review_status": "confirmed"
+    },
+    {
+      "provenance_id": "prov-email-brevity",
+      "source": "references/research/03-expression-dna.md",
+      "source_locator": "lines 119-139",
+      "source_url": "https://money.cnn.com/2014/12/01/technology/steve-jobs-emails/index.html",
+      "classification": "A_surface",
+      "classification_reason": "sentence count, brevity, and conversational register; original decision content is removed",
+      "review_status": "confirmed"
+    },
+    {
+      "provenance_id": "prov-direct-opening",
+      "source": "references/research/02-conversations.md",
+      "source_locator": "section 2.1, WWDC 1997 response",
+      "source_url": "https://www.inc.com/justin-bariso/20-years-ago-steve-jobs-demonstrated-the-perfect-w.html",
+      "classification": "A_surface",
+      "classification_reason": "brief acknowledgement and transition form only; the decision to acknowledge or reframe remains upstream",
+      "review_status": "confirmed"
+    },
+    {
+      "provenance_id": "prov-rhythm-transition",
+      "source": "references/research/03-expression-dna.md",
+      "source_locator": "lines 230-240",
+      "source_url": "https://book.stevejobsarchive.com/",
+      "classification": "A_surface",
+      "classification_reason": "fragment length, cumulative rhythm, and contrast form; people, values, and claims are removed",
+      "review_status": "confirmed"
+    }
+  ],
+  "excluded_source_classes": ["B_interaction", "C_cognitive", "D_person_fact", "unknown_forbidden"],
+  "nuwa_complete_skill_runtime_access": false
+}

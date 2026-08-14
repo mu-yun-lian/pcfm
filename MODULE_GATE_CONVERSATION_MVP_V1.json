@@ -1,0 +1,125 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "pcfm-evidence-grounded-conversation-mvp",
+    "version": "1.0.0",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Persist isolated people, raw sources, conversations, frozen content contracts, rendered replies, optional local reality-answer comparisons, pending optimization candidates, and rollbackable exploratory versions; refuse when no confirmed in-scope material supports a reply.",
+    "interpretation": "evidence_grounded_extractive_conversation_product_loop",
+    "non_claims": [
+      "validated prediction of a real person's next response",
+      "recovery of beliefs, values, personality, or psychological mechanisms",
+      "a general large language model persona or complete-person Skill",
+      "validated person-specific style recognition",
+      "automatic verification that a supplied or fetched source is truthful or complete"
+    ],
+    "alternatives": [
+      "the reply quality is explained entirely by lexical retrieval from the saved source",
+      "a generic evidence-grounded answer performs as well as the named-person model",
+      "topic overlap rather than person-specific response structure explains apparent relevance"
+    ],
+    "refusal_state": "refused_no_confirmed_sources_or_out_of_scope_or_ambiguous_context",
+    "scope": "One selected person per isolated local workspace; text, TXT, Markdown, HTML, text-bearing PDF, and direct HTTP(S) URL sources; local extractive response baseline; optional local verified-answer comparison."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Product behavior is distinguished by per-person storage isolation, deterministic source-role filtering, zero comparison calls when disabled, frozen-contract rendering, and held-out source exclusion. Person-specific prediction requires future sealed real dialogue evaluation and wrong-person/generic/retrieval controls.",
+    "unidentified_questions": [
+      "whether the extracted answer predicts what the person would say now",
+      "whether retrieved wording reflects stable person-specific cognition rather than source topic",
+      "whether style markers are recognizable without identity and topic leakage"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "model_source",
+      "applicability_reference",
+      "final_holdout",
+      "reference_only",
+      "pending_optimization",
+      "post_deployment_feedback"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "The local system binds supplied bytes, extraction, speaker metadata, source locator, hashes, near-duplicates, source role, and version membership. It cannot prove the user supplied every source, that a remote page is authentic, or that a speaker label is historically correct without external review."
+  },
+  "computation": {
+    "deployment_kernel": "pcfm.conversation_mvp.ConversationWorkbench.send_message",
+    "selection_kernel": "pcfm.conversation_mvp.ConversationWorkbench.send_message",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Confidence is a bounded retrieval-support score, not a calibrated probability of the person's true next response; missing or weak evidence produces refusal.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "ProductService conversation API",
+      "local three-column conversation web application",
+      "person export and import",
+      "optimization and rollback history"
+    ]
+  },
+  "tests": {
+    "positive_recovery": ["tests/test_conversation_mvp.py"],
+    "null_or_negative_control": ["tests/test_conversation_mvp.py"],
+    "stable_end_to_end_misspecification": ["tests/test_conversation_mvp.py"],
+    "leakage_or_replay": ["tests/test_conversation_mvp.py"],
+    "invariance": ["tests/test_conversation_mvp.py"],
+    "gate_boundary_attack": ["tests/test_conversation_mvp.py"],
+    "report_deployment_equality": ["tests/test_conversation_mvp.py"],
+    "scope_and_expiry": ["tests/test_conversation_mvp.py"],
+    "artifact_recomputation": ["tests/test_conversation_mvp.py"],
+    "public_interface": ["tests/test_webapp.py"],
+    "downstream_integration": ["tests/test_conversation_mvp.py", "tests/test_webapp.py"],
+    "full_regression": ["tests"]
+  },
+  "verification": {
+    "commands": [
+      "python -m unittest discover -s tests -q",
+      "python -m unittest tests.test_conversation_mvp tests.test_webapp -q",
+      "node --check src/pcfm/web_static/app.js",
+      "browser acceptance at http://127.0.0.1:8768/"
+    ],
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "275 tests passed in 283.172 seconds"
+      },
+      {
+        "exit_code": 0,
+        "summary": "13 focused conversation and HTTP tests passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "JavaScript syntax check passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "Raw source review, multi-turn reply and refusal, opt-in reality comparison, pending optimization, gated v3 creation, v2 rollback, reload persistence, and zero console warnings/errors passed; unchecked reality comparison telemetry remained zero until explicit opt-in"
+      }
+    ]
+  },
+  "remaining_limitations": [
+    "No trainable person response adapter or language-model backend is included in this local dependency-light MVP.",
+    "Runtime web discovery from only a person's name is not implemented without a configured external search backend; direct URL collection is implemented.",
+    "PDF extraction requires embedded text and does not perform OCR.",
+    "Reality-answer verification remains pending human review and does not automatically establish historical authenticity.",
+    "No sealed real-person holdout evaluation currently supports a response-prediction accuracy claim."
+  ]
+}

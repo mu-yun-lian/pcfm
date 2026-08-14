@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcfm-mvp"
+version = "0.2.0"
+description = "A local evidence-constrained person cognitive modeling workbench with a separate behavior baseline."
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0", "pypdf>=6.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pcfm = ["web_static/*", "cases/*.json", "expression_profiles/*/*"]

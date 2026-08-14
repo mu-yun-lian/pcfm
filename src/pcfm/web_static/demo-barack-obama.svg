@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Barack Obama demo avatar</title>
+  <rect width="128" height="128" rx="64" fill="#6d4931"/>
+  <circle cx="64" cy="64" r="48" fill="none" stroke="#e9e2ce" stroke-width="3"/>
+  <text x="64" y="76" text-anchor="middle" fill="#fffaf0" font-family="Georgia,serif" font-size="38">BO</text>
+</svg>

@@ -1,0 +1,12 @@
+{"test_id":"style-001","name":"profile swap preserves content","gate":"structured_content_exact"}
+{"test_id":"style-002","name":"contradictory content is not corrected","gate":"locked_claim_exact"}
+{"test_id":"style-003","name":"empty contract emits no view","gate":"empty_output"}
+{"test_id":"style-004","name":"no memory means no story","gate":"memory_addition"}
+{"test_id":"style-005","name":"no quote means no quotation","gate":"quote_addition"}
+{"test_id":"style-006","name":"raw user question is forbidden","gate":"contract_field_allowlist"}
+{"test_id":"style-007","name":"blind recognition after identity removal","gate":"future_external_blind_evaluation","status":"not_assessed"}
+{"test_id":"style-008","name":"entities numbers dates negation modality and confidence survive","gate":"protected_content"}
+{"test_id":"style-009","name":"swapping profile changes only surface","gate":"contract_digest_equal"}
+{"test_id":"style-010","name":"complete Nuwa persona prompt pollution is rejected","gate":"new_claim_detection"}
+{"test_id":"style-011","name":"twenty turns retain upstream authority","gate":"per_turn_contract_exact"}
+{"test_id":"style-012","name":"malicious style rule cannot override contract","gate":"sealed_profile_and_rule_allowlist"}

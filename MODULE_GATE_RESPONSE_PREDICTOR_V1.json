@@ -1,0 +1,120 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "pcfm-unified-response-predictor",
+    "version": "1.0.0",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "Given one person's confirmed, attributable response events plus current and prior conversation context, return one deterministic multi-head distribution, evidence-ranked content candidates, applicability status, refusal reasons, and a frozen rendering contract without a generative language-model call in the content path.",
+    "interpretation": "person_conditioned_evidence_ranked_response_prediction_exploratory",
+    "non_claims": [
+      "confirmed accuracy for any real person's future response",
+      "recovery of beliefs, values, personality, emotion, or causal psychology",
+      "calibrated confidence before independent temporal validation",
+      "proof that weak rule labels are true semantic labels",
+      "proof that the available evidence corpus is complete"
+    ],
+    "alternatives": [
+      "lexical topic overlap explains performance",
+      "a person-history frequency baseline performs equally well",
+      "a wrong-person or pooled population model performs equally well"
+    ],
+    "refusal_state": "prediction_refused_when_evidence_or_local_support_is_insufficient; temporal staleness remains unimplemented for the response-event kernel",
+    "scope": "Confirmed direct-person text response events in the recorded language, time, domain, speaker, and context envelope; model-generated chat history is context only and never evidence."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Strict later-time holdouts and the same questions scored by the correct-person, wrong-person, population, retrieval, history-frequency, and recent-population baselines.",
+    "unidentified_questions": [
+      "whether selected evidence units reflect the person's current unobserved internal state",
+      "whether unobserved sources would change the fitted response distribution",
+      "whether apparent person specificity transfers beyond validated domains and times"
+    ]
+  },
+  "evidence": {
+    "roles": [
+      "parameter_training",
+      "applicability_calibration",
+      "feature_discovery",
+      "candidate_selection",
+      "sealed_final_validation",
+      "post_deployment_monitoring",
+      "external_reality_comparison"
+    ],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "The system can bind supplied source bytes, attribution, role, extraction, timestamps, near-duplicates, model versions, and prediction inputs. Only an external collection registry can establish corpus completeness and historical truth."
+  },
+  "computation": {
+    "deployment_kernel": "pcfm.response_prediction.ResponsePredictionKernel.predict",
+    "selection_kernel": "pcfm.response_prediction.ResponsePredictionKernel.predict",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Head parameter uncertainty and local evidence support are reported; model-form, weak-label, corpus-completeness, and selection uncertainty remain unquantified, so confidence is explicitly uncalibrated.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": false,
+    "metadata_scope": false,
+    "temporal_direction_and_expiry": false
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": [
+      "ProductService conversation API",
+      "conversation web application",
+      "reality comparison",
+      "optimization validation",
+      "version rollback",
+      "baseline evaluation"
+    ]
+  },
+  "tests": {
+    "positive_recovery": ["tests/test_response_prediction_v1.py"],
+    "target_alignment_and_hostile_cases": ["tests/test_prediction_layer_target_v1.py"],
+    "null_or_negative_control": ["tests/test_response_prediction_v1.py"],
+    "stable_end_to_end_misspecification": ["tests/test_response_prediction_v1.py"],
+    "leakage_or_replay": ["tests/test_response_prediction_v1.py"],
+    "invariance": ["tests/test_response_prediction_v1.py"],
+    "gate_boundary_attack": ["tests/test_response_prediction_v1.py"],
+    "report_deployment_equality": ["tests/test_response_prediction_v1.py"],
+    "scope_and_expiry": ["tests/test_response_prediction_v1.py"],
+    "artifact_recomputation": ["tests/test_response_prediction_v1.py"],
+    "public_interface": ["tests/test_webapp.py"],
+    "downstream_integration": ["tests/test_response_prediction_v1.py", "tests/test_webapp.py"],
+    "full_regression": ["tests/test_response_prediction_v1.py", "tests/test_conversation_mvp.py", "tests/test_webapp.py"]
+  },
+  "verification": {
+    "commands": [
+      "PYTHONPATH=src python -m unittest discover -s tests -p test_response_prediction_v1.py -v",
+      "PYTHONPATH=src python -m unittest discover -s tests -v"
+    ],
+    "results": [
+      {
+        "exit_code": 0,
+        "summary": "10 focused response-predictor tests passed"
+      },
+      {
+        "exit_code": 0,
+        "summary": "337 full-regression tests passed after prediction-layer Loop 5 in 197.485 seconds"
+      }
+    ],
+    "browser_acceptance": "Created two isolated people, processed raw Q&A, ran multi-turn prediction, proved zero reality calls while unchecked, compared a local reality answer without replacement, created a pending candidate, created v2, rolled back to v1, archived/restored a person, and retained state after restart."
+  },
+  "remaining_limitations": [
+    "No independent real-person temporal holdout is available in the local project.",
+    "Weak deterministic labels do not identify psychological constructs.",
+    "Name-only network collection requires a configured search provider.",
+    "Dynamic, mechanism, Empirical-Bayes, HyperNetwork, and cognitive feature candidates remain inactive until compatible response-event evidence and common evaluation exist."
+    ,"Missing response time now blocks training, temporal validation, and reality optimization; runtime temporal expiry and independently verified occasion/relationship metadata remain incomplete."
+  ]
+}

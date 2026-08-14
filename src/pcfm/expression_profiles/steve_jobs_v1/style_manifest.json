@@ -1,0 +1,39 @@
+{
+  "schema_version": "pcfm-expression-style-manifest-v1",
+  "profile_id": "steve-jobs-surface-en-v1",
+  "version": "1.0.0",
+  "person_id": "steve-jobs",
+  "person_name": "Steve Jobs",
+  "corpus_scope": "Public English interviews, keynote delivery observations, and concise email-form observations represented in the local Nuwa research files; cognitive content is excluded.",
+  "time_scope": {
+    "start": "1981-01-01",
+    "end": "2010-12-31"
+  },
+  "supported_languages": [
+    "en"
+  ],
+  "supported_modes": [
+    "interview_public",
+    "keynote_public",
+    "concise_email"
+  ],
+  "validation_status": "semantic_gate_passed_style_recognition_not_assessed",
+  "runtime_authority": "surface_rewrite_only",
+  "forbidden_inputs": [
+    "raw user question",
+    "cognitive model",
+    "person facts",
+    "evidence memory",
+    "timeline",
+    "relationship facts"
+  ],
+  "file_digests": {
+    "surface_rules.json": "254af9ed2bda4562b8e2e3173840b679631070e9944efa48792cc7ce32c6c05c",
+    "context_modes.json": "7ee1dbe194c86949c41019098da062bde41e405c18223bdf92e1629f06990866",
+    "sanitized_examples.jsonl": "d723453cc6f28fcea19bb99e857ade6c8cda5fed822b0078f06cf13b3c0d5046",
+    "forbidden_mutations.json": "7b7c0f3ae10fad8a2b89d18243c69e64dce521c61496f25fb886d1d180746c40",
+    "provenance.json": "ad32def675af544bfec4cb32480c05224d526f6b16d74e2ff78b4400026f9e7c",
+    "style_tests.jsonl": "92bc2a2caeb9a6567d692463cd1985f014850dfaae432b525fb3f347d006b3d8"
+  },
+  "sealed_at": "2026-08-10T11:55:03Z"
+}

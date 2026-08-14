@@ -1,0 +1,139 @@
+{
+  "schema_version": "cognitive-module-gate-v1",
+  "module": {
+    "id": "pcfm-reviewed-public-response-simulation-v4",
+    "version": "4.0.0",
+    "status": "implemented_exploratory"
+  },
+  "claim": {
+    "operational_target": "From exact reviewed public response events, build lineage-bound conditional public preference structures and route a new dialogue turn to direct evidence, an applicable repeated structure, related evidence without a new stance, or no person-specific prediction.",
+    "interpretation": "observable_public_response_pattern_only",
+    "non_claims": [
+      "private or sincere inner values",
+      "complete person knowledge",
+      "causal mental mechanisms",
+      "LLM semantic candidates as verified evidence",
+      "calibrated real-person accuracy before temporal holdout evaluation"
+    ],
+    "alternatives": [
+      "direct retrieval explains apparent performance",
+      "generic topic overlap explains apparent transfer",
+      "duplicate source lineages explain repetition",
+      "the dialogue model supplies the apparent person stance"
+    ],
+    "refusal_state": "general_assisted_without_person_attribution",
+    "scope": "One public person; reviewed source spans, roles, audiences, declared domains, source lineages and evidence time. Generated dialogue is never fitting evidence."
+  },
+  "identifiability": {
+    "distinguishing_evidence": "Strictly later reviewed real responses scored by the same V4 kernel and compared with direct-retrieval, wrong-person and duplicate-lineage baselines.",
+    "unidentified_questions": [
+      "whether public responses reflect private mental states",
+      "whether undisclosed public records reverse a structure",
+      "whether observed public patterns remain stable outside the evidence window"
+    ]
+  },
+  "evidence": {
+    "roles": ["parameter_fitting", "candidate_discovery", "sealed_final_validation", "external_reality_comparison", "post_deployment_monitoring"],
+    "role_separation": true,
+    "future_holdout": false,
+    "lineage_bound": true,
+    "content_replay_checked": true,
+    "completeness_boundary": "The module verifies supplied bytes, exact reviewed spans, declared speaker, time and source lineage. It cannot prove corpus completeness, sincerity or hidden events."
+  },
+  "computation": {
+    "deployment_kernel": "pcfm.simulation_v4.SimulationKernelV4.predict",
+    "selection_kernel": "pcfm.simulation_v4.SimulationKernelV4.predict",
+    "same_predictive_kernel": true,
+    "uncertainty_scope": "Evidence support and applicability only; never an accuracy probability.",
+    "order_invariant": true
+  },
+  "gates": {
+    "hard_floors": true,
+    "base_eligibility": true,
+    "global_and_local_applicability": true,
+    "metadata_scope": true,
+    "temporal_direction_and_expiry": true
+  },
+  "artifacts": {
+    "versioned_schema": true,
+    "integrity_bound": true,
+    "raw_evidence_recomputable": true,
+    "old_version_refused": true
+  },
+  "integration": {
+    "unified_entry_point": true,
+    "downstream_consumers": ["conversation API", "web conversation", "version persistence", "style renderer", "reality optimization", "temporal holdout evaluation"]
+  },
+  "tests": {
+    "positive_recovery": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_only_reviewed_canonical_tradeoffs_form_a_repeated_structure",
+      "tests/test_simulation_v4.py::SimulationV4ProductIntegrationTests.test_product_runtime_uses_v4_and_v3_is_not_an_active_component"
+    ],
+    "null_or_negative_control": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_llm_candidate_is_not_fitting_evidence_until_reviewed",
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_reviewed_event_keeps_ungrounded_model_tradeoff_out_of_model",
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_ungrounded_model_option_is_ignored"
+    ],
+    "stable_end_to_end_misspecification": [
+      "tests/test_simulation_v3.py::SimulationV3ProductIntegrationTests.test_product_runtime_does_not_promote_raw_v3_regex_tradeoffs"
+    ],
+    "leakage_or_replay": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_temporal_holdout_uses_the_deployed_kernel_and_detects_leakage"
+    ],
+    "invariance": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_integrity_order_invariance_and_old_schema_refusal"
+    ],
+    "gate_boundary_attack": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_duplicate_lineage_cannot_make_a_runtime_structure",
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_model_may_resolve_only_real_history_message_ids",
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_model_cannot_select_a_direction_from_only_one_grounded_option",
+      "tests/test_simulation_v4.py::SimulationV4ProductIntegrationTests.test_generation_cannot_add_person_attributed_experience",
+      "tests/test_simulation_v4.py::SimulationV4ProductIntegrationTests.test_person_inference_expansion_cannot_add_unsupported_numbers",
+      "tests/test_conversation_mvp.py::ConversationMVPTests.test_optimization_recomputes_selected_event_from_raw_source",
+      "tests/test_conversation_mvp.py::ConversationMVPTests.test_optimization_promotes_only_the_selected_reality_event"
+    ],
+    "report_deployment_equality": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_temporal_holdout_uses_the_deployed_kernel_and_detects_leakage"
+    ],
+    "scope_and_expiry": [
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_private_role_and_later_time_block_person_projection"
+    ],
+    "artifact_recomputation": [
+      "tests/test_simulation_v4.py::SimulationV4ProductIntegrationTests.test_persisted_model_is_recomputed_from_reviewed_source_bytes",
+      "tests/test_simulation_v4.py::SimulationV4Tests.test_integrity_order_invariance_and_old_schema_refusal"
+    ],
+    "public_interface": [
+      "tests/test_simulation_v4.py::SimulationV4ProductIntegrationTests.test_product_runtime_uses_v4_and_v3_is_not_an_active_component",
+      "tests/test_webapp.py::WebAppTests.test_conversation_http_people_sources_chat_and_comparison"
+    ],
+    "downstream_integration": [
+      "tests/test_conversation_mvp.py",
+      "tests/test_response_prediction_v1.py",
+      "tests/test_response_kernel_v2.py",
+      "tests/test_demo_people.py",
+      "tests/test_webapp.py"
+    ],
+    "full_regression": [
+      "tests/test_simulation_v4.py"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "PYTHONPATH=src python -m py_compile src/pcfm/simulation_v4.py src/pcfm/conversation_mvp.py src/pcfm/expression_renderer.py src/pcfm/webapp.py",
+      "node --check src/pcfm/web_static/app.js",
+      "PYTHONPATH=src python -m unittest tests.test_simulation_v4 tests.test_simulation_v3 tests.test_conversation_mvp tests.test_response_prediction_v1 tests.test_response_kernel_v2 tests.test_demo_people tests.test_alignment_v04 tests.test_prediction_layer_target_v1 tests.test_webapp -q",
+      "PYTHONPATH=src python -m unittest discover -s tests -q"
+    ],
+    "results": [
+      {"exit_code": 0, "summary": "Python compilation passed"},
+      {"exit_code": 0, "summary": "JavaScript syntax check passed"},
+      {"exit_code": 0, "summary": "104 focused product and integration tests passed in 72.907 seconds"},
+      {"exit_code": 0, "summary": "369 full-regression tests passed in 286.455 seconds"}
+    ]
+  },
+  "remaining_limitations": [
+    "No adequate independent real-person temporal sample currently establishes prediction accuracy.",
+    "LLM event and query semantics remain bounded candidates; exact-span review and code gates cannot prove semantic truth.",
+    "General model knowledge is external briefing and never becomes person evidence without reviewed source material; ordinary non-numeric factual accuracy is not verified by code."
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "scenario_id": "future-001",
+  "features": {"reward": 0.7, "risk": -0.5, "control": 0.9},
+  "options": ["A", "B"],
+  "domain": "example",
+  "context": {
+    "description": "Example structured choice"
+  }
+}
