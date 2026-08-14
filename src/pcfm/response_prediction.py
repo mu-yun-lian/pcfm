@@ -87,6 +87,18 @@ EVALUATION_TENDENCY_TYPES = frozenset(
     }
 )
 
+# 事件结构类型（决策结构轴，二维网格的事件类型维度）
+EVENT_STRUCTURE_TYPES = (
+    "conflict_management",        # 冲突/争端处理
+    "resource_allocation",        # 资源分配
+    "risk_decision",              # 风险决策
+    "personnel_choice",           # 人员选择/任用
+    "moral_evaluation",           # 道德/品行评价
+    "policy_stance",              # 政策立场表态
+    "means_ends",                 # 手段—目的判断
+    "responsibility_attribution", # 责任归属
+)
+
 DATA_ROLE_MAP = {
     "model_source": "parameter_training",
     "applicability_reference": "applicability_calibration",

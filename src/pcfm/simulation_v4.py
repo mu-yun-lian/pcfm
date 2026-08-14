@@ -214,6 +214,7 @@ def _frame(
     reasons: Sequence[str] = (),
     tradeoffs: Sequence[Mapping[str, object]] = (),
     demonstrated_claim_spans: Sequence[str] = (),
+    event_structure_type: str = "",
 ) -> dict[str, object]:
     source_id = str(source["source_id"])
     event_id = f"event-v4-{_hash([source_id, locator, question, response])[:16]}"
@@ -239,6 +240,7 @@ def _frame(
         },
         "decision_frame": {
             "trigger": question,
+            "event_structure_type": event_structure_type,
             "conditions": sorted({str(value) for value in conditions if str(value).strip()}),
             "observed_tradeoffs": [copy.deepcopy(dict(value)) for value in tradeoffs],
         },
@@ -332,6 +334,7 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                 reasons=[str(value) for value in item.get("reasons", [])],
                 tradeoffs=clean_tradeoffs,
                 demonstrated_claim_spans=[str(value) for value in item.get("demonstrated_claim_spans", [])],
+                event_structure_type=str(item.get("event_structure_type", "")),
             )
         )
     return frames, rejected
@@ -360,6 +363,9 @@ def _preference_atoms(frames: Sequence[Mapping[str, object]]) -> tuple[list[dict
                     "tendency_type": str(tradeoff.get("tendency_type", "")),
                     "direction": str(tradeoff.get("direction", "")),
                     "target": str(tradeoff.get("target", "")),
+                    "event_structure_type": str(
+                        dict(frame["decision_frame"]).get("event_structure_type", "")
+                    ),
                     "event_frame_id": str(frame["event_frame_id"]),
                     "source_id": str(frame["source_id"]),
                     "source_lineage": str(frame["source_lineage"]),
@@ -408,6 +414,9 @@ def _structures(atoms: Sequence[Mapping[str, object]]) -> list[dict[str, object]
                 ),
                 "directions": sorted(
                     {str(item.get("direction", "")) for item in values if item.get("direction")}
+                ),
+                "event_structure_types": sorted(
+                    {str(item.get("event_structure_type", "")) for item in values if item.get("event_structure_type")}
                 ),
                 "protected_interest_id": protected,
                 "accepted_cost_id": cost,
