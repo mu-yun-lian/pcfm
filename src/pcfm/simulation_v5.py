@@ -796,6 +796,7 @@ class SimulationKernelV5:
                     "projection_kind": evaluation["projection_kind"],
                     "dimensions": evaluation["dimensions"],
                     "target": evaluation["target"],
+                    "prediction_statement": str(evaluation["statement"]),
                 },
                 applicability=str(evaluation["applicability"]),
                 support=float(evaluation["support"]),

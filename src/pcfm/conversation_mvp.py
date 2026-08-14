@@ -2632,7 +2632,10 @@ class ConversationWorkbench:
         response_basis: Mapping[str, object] | None,
     ) -> tuple[str | None, dict[str, object]]:
         """Use an LLM for knowledge and wording, never as the person predictor."""
-        if str(dict(response_basis or {}).get("path", "")) == "contextual_orientation_projection":
+        if str(dict(response_basis or {}).get("path", "")) in {
+            "contextual_orientation_projection",
+            "object_evaluation_projection",
+        }:
             return self._compose_bounded_person_response(
                 person_id=person_id,
                 question=question,
@@ -3147,6 +3150,7 @@ class ConversationWorkbench:
                     "tendency_answer",
                     "preference_structure_answer",
                     "orientation_projection_answer",
+                    "object_evaluation_projection_answer",
                 }:
                     rendered, generation_trace = self._compose_assisted_response(
                         person_id=person_id,
