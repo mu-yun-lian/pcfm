@@ -295,6 +295,7 @@ class SimulationKernelV5:
             orientation_index.append(
                 {
                     "orientation_id": str(item["preference_structure_id"]),
+                    "tendency_types": list(map(str, item.get("tendency_types", []))),
                     "protected_interest_id": str(item["protected_interest_id"]),
                     "accepted_cost_id": str(item["accepted_cost_id"]),
                     "supporting_event_ids": list(map(str, item["supporting_event_ids"])),
