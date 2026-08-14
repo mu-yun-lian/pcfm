@@ -1200,10 +1200,10 @@ class ConversationWorkbench:
                 str(tradeoff.get("target_span", "")),
             ]
             spans_valid = all(
-                span and span.casefold() in evidence_text.casefold()
+                span and span.casefold() in source_text.casefold()
                 for span in required_spans
             ) and all(
-                not span or span.casefold() in evidence_text.casefold()
+                not span or span.casefold() in source_text.casefold()
                 for span in optional_spans
             )
             if (

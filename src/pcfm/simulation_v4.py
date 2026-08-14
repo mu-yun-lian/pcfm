@@ -300,9 +300,9 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                     (is_tradeoff and cost in INTERESTS and protected != cost)
                     or (is_evaluation and (not cost or cost in INTERESTS))
                 )
-                and _contains(evidence_text, protected_span)
-                and (not cost_span or _contains(evidence_text, cost_span))
-                and _contains(evidence_text, evidence_span)
+                and _contains(source_text, protected_span)
+                and (not cost_span or _contains(source_text, cost_span))
+                and _contains(source_text, evidence_span)
             )
             if not valid:
                 rejected.append(f"reviewed:{index}:tradeoff:{tradeoff_index}:ungrounded")
