@@ -37,6 +37,7 @@ def reviewed_frame(
         "reasons": [],
         "tradeoffs": [
             {
+                "tendency_type": "principle_priority",
                 "protected_interest_id": preferred,
                 "accepted_cost_id": cost,
                 "protected_interest_span": "safety",

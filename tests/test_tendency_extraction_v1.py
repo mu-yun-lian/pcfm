@@ -140,5 +140,106 @@ class TendencyExtractionV1Tests(unittest.TestCase):
         self.assertIn("principle_priority", structures[0]["tendency_types"])
 
 
+class EvaluationExtractionModel:
+    """Deterministic LLM stub returning one evaluation-class tendency (behavior_evaluation, oppose)."""
+
+    def roles(self):
+        return {"default_dialogue": "", "material_processing": "fake:model", "validation": ""}
+
+    def resolve_model_ref(self, model_ref, require_available=True):
+        return ({"service_id": "fake", "provider": "fixture"}, "model")
+
+    def snapshot(self, model_ref):
+        return {"snapshot_id": "fixture", "provider": "fixture", "model_id": "model"}
+
+    def invoke(self, service_id, model_id, messages, **kwargs):
+        return {
+            "text": json.dumps(
+                {
+                    "events": [
+                        {
+                            "trigger": "Does it make you question his fitness?",
+                            "context": "Official press conference",
+                            "response": "Yes, I think the Republican nominee is unfit to serve as President.",
+                            "occasion": "Official press conference",
+                            "interlocutor": "audience",
+                            "speaker": "Alice Example",
+                            "locator": "paragraph 1",
+                            "speech_act": "direct_answer",
+                            "stance": "oppose",
+                            "claims": ["The Republican nominee is unfit to serve as President."],
+                            "reasons": [],
+                            "memories": [],
+                            "uncertainties": [],
+                            "tradeoffs": [
+                                {
+                                    "tendency_type": "behavior_evaluation",
+                                    "protected_interest_id": "competence",
+                                    "accepted_cost_id": "",
+                                    "protected_interest_span": "unfit",
+                                    "accepted_cost_span": "",
+                                    "evidence_span": "unfit to serve as President",
+                                    "direction": "oppose",
+                                    "target": "the Republican nominee",
+                                    "target_span": "the Republican nominee",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            "snapshot": self.snapshot(""),
+        }
+
+
+class EvaluationProjectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.alice = self.service.create_conversation_person(
+            name="Alice Example", aliases=["Alice"], language="en"
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_evaluation_tendency_drives_object_evaluation(self) -> None:
+        person_id = str(self.alice["person_id"])
+        self.service.conversation._model_services = EvaluationExtractionModel()
+        source = self.service.add_conversation_text_source(
+            person_id,
+            title="Official assessment",
+            text="Yes, I think the Republican nominee is unfit to serve as President.",
+            speaker="Alice Example",
+            source_date="2016-08-02",
+            dataset_role="model_source",
+            content_authenticity="verbatim_transcript",
+            source_locator="paragraph 1",
+            source_context="Official press conference",
+            source_url="https://example.org/assessment",
+        )
+        self.service.review_conversation_source(person_id, str(source["source_id"]), "confirmed")
+        extracted = self.service.extract_conversation_response_candidates(
+            person_id, str(source["source_id"])
+        )
+        candidate_id = str(extracted["llm_response_event_candidates"][0]["candidate_id"])
+        self.service.review_conversation_response_candidate(
+            person_id, str(source["source_id"]), candidate_id, "confirmed"
+        )
+        summary = self.service.conversation_summary(person_id)
+        model = self.service.conversation._simulation_model(
+            person_id, int(summary["active_version"])
+        )
+        atom = model["reviewed_public_model"]["preference_atoms"][0]
+        self.assertEqual("oppose", atom["direction"])
+        self.assertEqual("behavior_evaluation", atom["tendency_type"])
+        self.assertEqual("the Republican nominee", atom["target"])
+        # 宽评价问题走对象评价投影，输出反对方向
+        reply = self.service.send_conversation_message(person_id, "你认为特朗普怎么样")
+        self.assertEqual("object_evaluation_projection_answer", reply["answer_status"])
+        stance = reply["structured_prediction"]["stance"]["label"]
+        self.assertEqual("oppose", stance)
+
+
 if __name__ == "__main__":
     unittest.main()

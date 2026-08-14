@@ -26,6 +26,7 @@ def reviewed_frame(question: str, response: str, domain: str) -> dict[str, objec
         "demonstrated_claim_spans": [],
         "tradeoffs": [
             {
+                "tendency_type": "principle_priority",
                 "protected_interest_id": "safety",
                 "accepted_cost_id": "speed",
                 "protected_interest_span": "safety",

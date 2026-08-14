@@ -1143,31 +1143,47 @@ class SimulationKernelV5:
             return None
         target = str(query.get("target_entity", "")).strip()
         domains = set(map(str, query.get("domain_ids", [])))
-        dimensions: list[dict[str, object]] = []
-        for raw in artifact.get("orientation_index", []):
+        # 从单事件偏好原子（preference_atoms）读取评价类倾向，单来源也能推导
+        atoms = list(
+            dict(artifact.get("reviewed_public_model", {})).get("preference_atoms", [])
+        )
+        grouped: dict[str, dict[str, object]] = {}
+        for raw in atoms:
             item = dict(raw)
-            types = set(map(str, item.get("tendency_types", [])))
-            directions = list(map(str, item.get("directions", [])))
-            if not (types & EVALUATION_TENDENCY_TYPES):
+            tendency_type = str(item.get("tendency_type", ""))
+            direction = str(item.get("direction", ""))
+            if tendency_type not in EVALUATION_TENDENCY_TYPES:
                 continue
-            if not directions:
+            if direction not in {"support", "oppose", "mixed", "conditional_support"}:
                 continue
-            item_domains = set(map(str, item.get("primary_domains", [])))
-            if domains and item_domains and not (domains & item_domains):
+            atom_target = str(item.get("target", "")).strip()
+            if target and atom_target and (
+                target.casefold() not in atom_target.casefold()
+                and atom_target.casefold() not in target.casefold()
+                and _similarity(target, atom_target) < 0.4
+            ):
                 continue
-            dimensions.append(
-                {
-                    "interest_id": str(item.get("protected_interest_id", "")),
-                    "directions": directions,
-                    "tendency_types": sorted(types),
-                    "evidence_event_ids": list(
-                        map(str, item.get("supporting_event_ids", []))
-                    ),
-                    "independent_source_count": int(
-                        item.get("independent_source_count", 0)
-                    ),
-                }
+            atom_domains = set(map(str, item.get("domain_tags", [])))
+            if domains and atom_domains and not (domains & atom_domains):
+                continue
+            interest_id = str(item.get("protected_interest_id", ""))
+            slot = grouped.setdefault(
+                interest_id,
+                {"directions": [], "evidence_event_ids": [], "tendency_types": set()},
             )
+            slot["directions"].append(direction)
+            slot["evidence_event_ids"].append(str(item.get("event_frame_id", "")))
+            slot["tendency_types"].add(tendency_type)
+        dimensions = [
+            {
+                "interest_id": interest_id,
+                "directions": slot["directions"],
+                "tendency_types": sorted(slot["tendency_types"]),
+                "evidence_event_ids": sorted(set(slot["evidence_event_ids"])),
+                "independent_source_count": len(set(slot["evidence_event_ids"])),
+            }
+            for interest_id, slot in sorted(grouped.items())
+        ]
         Chinese = bool(re.search(r"[\u4e00-\u9fff]", str(query["query"])))
         if not dimensions:
             statement = (

@@ -8,6 +8,8 @@ import re
 from datetime import datetime, timezone
 from typing import Mapping, Sequence
 
+from .response_prediction import EVALUATION_TENDENCY_TYPES, TRADEOFF_TENDENCY_TYPES
+
 
 REVIEWED_EVENT_SCHEMA_V4 = "pcfm-reviewed-public-response-event-v4"
 MODEL_SCHEMA_V4 = "pcfm-simulation-model-v4"
@@ -287,12 +289,17 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
             protected_span = str(tradeoff.get("protected_interest_span", "")).strip()
             cost_span = str(tradeoff.get("accepted_cost_span", "")).strip()
             evidence_span = str(tradeoff.get("evidence_span", "")).strip()
+            tendency_type = str(tradeoff.get("tendency_type", ""))
+            is_evaluation = tendency_type in EVALUATION_TENDENCY_TYPES
+            is_tradeoff = tendency_type in TRADEOFF_TENDENCY_TYPES
             valid = (
                 protected in INTERESTS
-                and cost in INTERESTS
-                and protected != cost
+                and (
+                    (is_tradeoff and cost in INTERESTS and protected != cost)
+                    or (is_evaluation and (not cost or cost in INTERESTS))
+                )
                 and _contains(evidence_text, protected_span)
-                and _contains(evidence_text, cost_span)
+                and (not cost_span or _contains(evidence_text, cost_span))
                 and _contains(evidence_text, evidence_span)
             )
             if not valid:
@@ -405,7 +412,9 @@ def _structures(atoms: Sequence[Mapping[str, object]]) -> list[dict[str, object]
                 "protected_interest_id": protected,
                 "accepted_cost_id": cost,
                 "protected_interest_label": str(INTERESTS[protected]["label_zh"]),
-                "accepted_cost_label": str(INTERESTS[cost]["label_zh"]),
+                "accepted_cost_label": (
+                    str(INTERESTS[cost]["label_zh"]) if cost in INTERESTS else "not_applicable"
+                ),
                 "supporting_event_ids": sorted(str(item["event_frame_id"]) for item in values),
                 "supporting_atom_ids": sorted(str(item["preference_atom_id"]) for item in values),
                 "independent_source_count": len(lineages),
