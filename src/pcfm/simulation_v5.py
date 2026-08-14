@@ -63,6 +63,17 @@ def _is_person_opinion_request(text: str) -> bool:
     )
 
 
+def _is_identity_request(text: str) -> bool:
+    clean = str(text).strip().casefold()
+    return bool(
+        re.search(
+            r"(?:who are you|what are you|introduce yourself|tell me about yourself|"
+            r"你是谁|你是什么人|介绍一下你|介绍你自己|你是哪位|你叫什么)",
+            clean,
+        )
+    )
+
+
 def _matches_reviewed_entity_alias(
     text: str, frame: Mapping[str, object]
 ) -> bool:
@@ -658,6 +669,31 @@ class SimulationKernelV5:
                 trace={**trace, "prediction_path": "ordinary_dialogue"},
                 ordinary_text=ordinary[1],
             )
+        if _is_identity_request(clean):
+            identity_note = str(dict(artifact.get("scope", {})).get("identity_note", "")).strip()
+            if identity_note:
+                core_identity = identity_note.split(";")[0].strip()
+                is_chinese = bool(re.search(r"[\u4e00-\u9fff]", clean))
+                statement = f"我是{core_identity}。" if is_chinese else f"I am {core_identity}."
+                return self._result(
+                    artifact,
+                    answer_status="identity_introduction",
+                    speech_act="direct_answer",
+                    stance="neutral",
+                    claims=[statement],
+                    reasons=[],
+                    uncertainties=[],
+                    evidence_event_ids=[],
+                    response_basis={
+                        "path": "identity_introduction",
+                        "person_prediction_status": "identity_introduction",
+                        "query_frame": query,
+                        "prediction_statement": statement,
+                    },
+                    applicability="identity_introduction",
+                    support=1.0,
+                    trace={**trace, "prediction_path": "identity_introduction"},
+                )
         if query["ambiguous_reference"]:
             return self._result(
                 artifact,
@@ -1141,6 +1177,9 @@ class SimulationKernelV5:
         evaluation-class tendency atoms instead of falling back to retrieval."""
         if query.get("question_scope") != "wide":
             return None
+        # 身份询问（你是谁/介绍一下你）不是对象评价，交给身份介绍路径
+        if _is_identity_request(str(query.get("query", ""))):
+            return None
         # 有利益取舍结构（scenario_effects）时走取向投影，不做对象评价投影
         if query.get("scenario_effects"):
             return None
@@ -1191,21 +1230,21 @@ class SimulationKernelV5:
         if not dimensions:
             statement = (
                 (
-                    f"关于{target}，我已有的公开表态不足以形成可靠的总体评价，"
-                    "因此我不会把某一条孤立说法当成完整看法。"
+                    f"关于{target}，我不倾向于用一句话来概括，"
+                    "这类问题更适合放到具体的事实和做法里谈。"
                 )
                 if target and Chinese
                 else (
-                    f"About {target}, my recorded public statements are not enough to form a reliable overall evaluation, "
-                    "so I would not turn a single isolated remark into a full view."
+                    f"About {target}, I would not reduce it to a single line; "
+                    "that kind of question is better addressed through concrete facts and actions."
                 )
                 if target
                 else (
-                    "我已有的公开表态不足以形成可靠的总体评价，"
-                    "因此我不会把某一条孤立说法当成完整看法。"
+                    "我不倾向于用一句话来概括，"
+                    "这类问题更适合放到具体的事实和做法里谈。"
                 )
                 if Chinese
-                else "My recorded public statements are not enough to form a reliable overall evaluation, so I would not turn a single isolated remark into a full view."
+                else "I would not reduce it to a single line; that kind of question is better addressed through concrete facts and actions."
             )
             return {
                 "stance": "neutral",
