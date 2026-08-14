@@ -189,8 +189,8 @@ class ResponseKernelV2Tests(unittest.TestCase):
         )
         self.assertEqual("general_assisted", reply["answer_status"])
         self.assertEqual("not_available", reply["person_prediction_status"])
-        self.assertIn("without person attribution", reply["text"])
-        self.assertNotIn("invented reason", reply["text"])
+        self.assertIn("我会先保留判断", reply["text"])
+        self.assertNotIn("invented", reply["text"])
 
     def test_person_opinion_does_not_degrade_to_third_party_briefing(self) -> None:
         fake = AssistedDialogueModel(

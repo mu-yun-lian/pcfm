@@ -2487,6 +2487,215 @@ class ConversationWorkbench:
             "structure_candidate_count": len(structure_candidates),
         }
 
+    def _unified_person_response(
+        self,
+        *,
+        person_id: str,
+        text: str,
+        history: Sequence[Mapping[str, object]],
+        conversation_context: Mapping[str, object],
+        model_ref: str,
+        artifact: Mapping[str, object],
+    ) -> dict[str, object]:
+        """One LLM call that internally performs understand->match->derive->compose.
+        Code only gates afterwards; it does not participate in derivation."""
+        if not model_ref:
+            return {
+                "status": "no_model",
+                "model_calls": 0,
+                "question_type": "",
+                "stance": "neutral",
+                "tendency_ids": [],
+                "answer": "",
+            }
+        if self._model_services is None:
+            raise ConversationError("模型服务管理器未启用；没有进行自动回退。")
+        service, model_id = self._model_services.resolve_model_ref(model_ref)
+        identity_note = str(
+            dict(artifact.get("scope", {})).get("identity_note", "")
+        ).strip()
+        # 倾向原子候选：事件原子 + 单事件偏好原子 + 公开取向
+        ranked_events = sorted(
+            artifact.get("event_frames", []),
+            key=lambda frame: (
+                -_similarity(
+                    text,
+                    " ".join(
+                        (
+                            str(dict(frame["decision_frame"]).get("trigger", "")),
+                            str(dict(frame["observed_response"]).get("verbatim", "")),
+                        )
+                    ),
+                ),
+                str(frame["event_frame_id"]),
+            ),
+        )[:10]
+        event_candidates = [
+            {
+                "event_frame_id": str(frame["event_frame_id"]),
+                "trigger": str(dict(frame["decision_frame"]).get("trigger", "")),
+                "response_verbatim": str(
+                    dict(frame["observed_response"]).get("verbatim", "")
+                )[:400],
+                "domain_tags": list(frame.get("domain_tags", [])),
+                "event_structure_type": str(
+                    dict(frame["decision_frame"]).get("event_structure_type", "")
+                ),
+            }
+            for frame in ranked_events
+        ]
+        preference_atoms = [
+            {
+                "preference_atom_id": str(item.get("preference_atom_id", "")),
+                "tendency_type": str(item.get("tendency_type", "")),
+                "direction": str(item.get("direction", "")),
+                "target": str(item.get("target", "")),
+                "protected_interest_id": str(item.get("protected_interest_id", "")),
+                "accepted_cost_id": str(item.get("accepted_cost_id", "")),
+                "event_structure_type": str(item.get("event_structure_type", "")),
+            }
+            for item in dict(artifact.get("reviewed_public_model", {})).get(
+                "preference_atoms", []
+            )
+        ][:30]
+        value_orientations = [
+            {
+                "orientation_id": str(item.get("orientation_id", "")),
+                "interest_id": str(item.get("interest_id", "")),
+                "directions": list(item.get("directions", [])),
+                "tendency_types": list(item.get("tendency_types", [])),
+                "primary_domains": list(item.get("primary_domains", [])),
+            }
+            for item in artifact.get("orientation_index", [])
+        ][:20]
+        payload = {
+            "person_identity": identity_note,
+            "question": text,
+            "conversation_messages": [
+                {"role": item.get("role"), "text": str(item.get("text", ""))[:600]}
+                for item in history[-12:]
+                if item.get("role") in {"user", "assistant"}
+            ],
+            "conversation_state": copy.deepcopy(dict(conversation_context or {})),
+            "event_candidates": event_candidates,
+            "preference_atoms": preference_atoms,
+            "value_orientations": value_orientations,
+            "allowed_tendency_types": sorted(TENDENCY_TYPES),
+            "allowed_interests": sorted(INTERESTS),
+            "allowed_stances": sorted(STANCES),
+            "allowed_event_structure_types": sorted(EVENT_STRUCTURE_TYPES),
+        }
+        system = (
+            "You are generating a first-person response for a modeled real person. "
+            "Derive the stance from the supplied tendency atoms (preference_atoms and "
+            "value_orientations), NOT from general world knowledge. "
+            "Return JSON with exactly question_type, stance, tendency_ids, and answer. "
+            "question_type is one of identity, self_evaluation, object_evaluation, "
+            "policy_stance, factual, ordinary_dialogue, or direct_historical. "
+            "stance is one of the allowed_stances. tendency_ids lists only the supplied "
+            "preference_atom/orientation IDs you actually relied on. "
+            "answer is the person's first-person reply in the current question's "
+            "language, under 1200 characters. Never add biography, memories, personal "
+            "experiences, attributed facts, numbers, dates, or quotations not present "
+            "in the supplied atoms. When no tendency atom applies, set stance to "
+            "insufficient_evidence and write a natural first-person reply without any "
+            "meta-commentary about evidence or data availability."
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        compatibility_retry = False
+        try:
+            response = self._model_services.invoke(
+                str(service["service_id"]),
+                model_id,
+                messages,
+                structured=True,
+                temperature=0.0,
+            )
+        except ModelServiceError as structured_error:
+            try:
+                response = self._model_services.invoke(
+                    str(service["service_id"]),
+                    model_id,
+                    messages,
+                    structured=False,
+                    temperature=0.0,
+                )
+                compatibility_retry = True
+            except ModelServiceError as retry_error:
+                raise ConversationError(str(retry_error)) from structured_error
+        try:
+            candidate = _json_mapping(response["text"])
+        except json.JSONDecodeError:
+            candidate = None
+        if not isinstance(candidate, Mapping):
+            return {
+                "status": "unparseable",
+                "model_calls": 2 if compatibility_retry else 1,
+                "question_type": "",
+                "stance": "neutral",
+                "tendency_ids": [],
+                "answer": "",
+            }
+        return {
+            "status": "ok",
+            "question_type": str(candidate.get("question_type", "")).strip(),
+            "stance": str(candidate.get("stance", "")).strip(),
+            "tendency_ids": [str(v) for v in candidate.get("tendency_ids", [])],
+            "answer": str(candidate.get("answer", "")).strip(),
+            "model_calls": 2 if compatibility_retry else 1,
+            "model_ref": model_ref,
+            "snapshot_id": dict(response["snapshot"])["snapshot_id"],
+            "fallback_used": False,
+            "same_model_json_compatibility_retry": compatibility_retry,
+        }
+
+    def _gate_unified_response(
+        self,
+        unified: Mapping[str, object],
+        artifact: Mapping[str, object],
+    ) -> tuple[bool, str]:
+        """Code gate: only validates the LLM output, never derives."""
+        stance = str(unified.get("stance", "")).strip()
+        if stance not in STANCES:
+            return False, "stance_not_in_closed_vocabulary"
+        valid_ids: set[str] = {
+            str(item.get("preference_atom_id", ""))
+            for item in dict(artifact.get("reviewed_public_model", {})).get(
+                "preference_atoms", []
+            )
+        }
+        valid_ids |= {
+            str(item.get("orientation_id", ""))
+            for item in artifact.get("orientation_index", [])
+        }
+        valid_ids |= {
+            str(item.get("orientation_id", ""))
+            for item in artifact.get("value_orientation_index", [])
+        }
+        valid_ids.discard("")
+        tendency_ids = {str(value) for value in unified.get("tendency_ids", [])}
+        if not tendency_ids <= valid_ids:
+            return False, "tendency_id_not_in_artifact"
+        answer = str(unified.get("answer", "")).strip()
+        if not answer:
+            return False, "empty_answer"
+        if len(answer) > 1200:
+            return False, "answer_too_long"
+        forbidden_experience = re.compile(
+            r"\b(?:i remember|i was|i have been|my administration|when i was|"
+            r"in my experience)\b|我记得|我曾经|我的政府|在我任内|以我的经历",
+            re.I,
+        )
+        if forbidden_experience.search(answer):
+            return False, "forbidden_experience"
+        # 回答应是第一人称（含"我"或英文"I"），避免退化为第三人称简报
+        if not re.search(r"[\u4e00-\u9fff]*[我]|\bI\b|\bI'|\bmy\b", answer):
+            return False, "not_first_person"
+        return True, ""
+
     def _compose_bounded_person_response(
         self,
         *,
@@ -3020,6 +3229,111 @@ class ConversationWorkbench:
                 conversation_context=conversation_context,
                 query_plan=query_plan,
             )
+            # 推导类问题：一次 LLM 统一路径，内部完成 理解→匹配→推导→组织；代码只守门
+            derivation_statuses = {
+                "general_assisted",
+                "object_evaluation_projection_answer",
+                "orientation_projection_answer",
+                "tendency_answer",
+                "preference_structure_answer",
+                "refused",
+                "clarification_needed",
+            }
+            if selected_model_ref and predicted["answer_status"] in derivation_statuses:
+                unified = self._unified_person_response(
+                    person_id=person_id,
+                    text=clean,
+                    history=prior_messages,
+                    conversation_context=conversation_context,
+                    model_ref=selected_model_ref,
+                    artifact=artifact,
+                )
+                gate_ok, gate_reason = self._gate_unified_response(unified, artifact)
+                structured = dict(predicted["structured_prediction"])
+                if unified["status"] == "ok" and gate_ok:
+                    answer_text = unified["answer"]
+                    stance = unified["stance"]
+                    base.update(
+                        {
+                            "status": "answered",
+                            "answer_status": predicted["answer_status"],
+                            "applicability": "unified_person_response",
+                            "confidence": 0.0,
+                            "text": answer_text,
+                            "neutral_content": answer_text,
+                            "frozen_contract": None,
+                            "frozen_contract_hash": None,
+                            "structured_prediction_hash": None,
+                            "structured_prediction": {
+                                "schema_version": "pcfm-unified-person-response-v1",
+                                "person_id": person_id,
+                                "speech_act": {"label": "direct_answer", "probability": 0.0},
+                                "stance": {"label": stance, "probability": 0.0},
+                                "claims": [{"id": "claim-unified-" + _text_hash(answer_text)[:16], "text": answer_text}],
+                                "reasons": [],
+                                "memories": [],
+                                "uncertainties": [],
+                                "answer_status": predicted["answer_status"],
+                                "confidence": 0.0,
+                                "applicability": "unified_person_response",
+                                "refusal_reasons": [],
+                                "evidence_refs": [],
+                                "evidence_event_ids": [],
+                                "response_basis": {
+                                    "path": "unified_person_response",
+                                    "person_prediction_status": "unified_tendency_derivation",
+                                    "question_type": unified["question_type"],
+                                    "tendency_ids": unified["tendency_ids"],
+                                },
+                            },
+                            "prediction_trace": {
+                                "kernel": "simulation-v5",
+                                "prediction_path": "unified_person_response",
+                                "generation": {
+                                    "status": "unified_person_response",
+                                    "model_calls": int(unified.get("model_calls", 0)),
+                                },
+                            },
+                            "style_status": "unified_person_generation",
+                            "style_gate": {"status": "unified_person_generation", "changed": False},
+                            "evidence": [],
+                            "uncertainties": [],
+                            "knowledge_source": "unified_model_derivation",
+                            "person_prediction_status": "unified_tendency_derivation",
+                        }
+                    )
+                else:
+                    base.update(
+                        {
+                            "status": "answered",
+                            "answer_status": predicted["answer_status"],
+                            "applicability": "unified_gate_failed",
+                            "confidence": 0.0,
+                            "text": "我会先保留判断。",
+                            "neutral_content": "我会先保留判断。",
+                            "prediction_trace": {"kernel": "simulation-v5", "prediction_path": "unified_gate_failed"},
+                            "style_status": "unified_gate_failed",
+                            "style_gate": {"status": "unified_gate_failed", "reason": gate_reason},
+                            "evidence": [],
+                            "uncertainties": [],
+                        }
+                    )
+                generation_calls = int(unified.get("model_calls", 0))
+                base["model_usage"] = {
+                    "selected_model_ref": selected_model_ref,
+                    "planning_calls": 0,
+                    "generation_calls": generation_calls,
+                    "validation_calls": 0,
+                    "total_calls": generation_calls,
+                    "status": "used" if generation_calls else "not_selected",
+                    "fallback_used": False,
+                }
+                messages.append(base)
+                _write_json(self._path(person_id, "conversation_messages.json"), messages)
+                state = self._state(person_id)
+                state["dialogue_state"] = self._conversation_context(profile, messages, "")
+                _write_json(self._path(person_id, "conversation_state.json"), state)
+                return copy.deepcopy(base)
             needs_semantic_help = predicted["answer_status"] in {
                 "general_assisted",
                 "clarification_needed",
@@ -3161,47 +3475,53 @@ class ConversationWorkbench:
                     "orientation_projection_answer",
                     "object_evaluation_projection_answer",
                 }:
-                    rendered, generation_trace = self._compose_assisted_response(
+                    # 一次 LLM 调用内部完成 理解→匹配→推导→组织；代码只守门，不参与推导
+                    unified = self._unified_person_response(
                         person_id=person_id,
-                        question=clean,
+                        text=clean,
                         history=prior_messages,
+                        conversation_context=conversation_context,
                         model_ref=selected_model_ref,
-                        response_basis=basis,
+                        artifact=artifact,
                     )
-                    if rendered is None and basis.get("path") == "value_conflict_projection":
-                        rendered = (
-                            f"{basis.get('prediction_statement', '')}\n\n"
-                            "The supported projection is shown above. Select an available "
-                            "dialogue model if you want a fuller explanation using general knowledge."
-                        ).strip()
-                    elif rendered is None:
-                        selected = dict(basis.get("selected_tendency") or {})
-                        stance = str(selected.get("stance", "neutral"))
-                        direction = {
-                            "support": "较可能支持这一方向",
-                            "oppose": "较可能反对这一方向",
-                            "conditional_support": "较可能根据具体条件作出判断",
-                            "mixed": "较可能同时表达相互冲突的考虑",
-                            "neutral": "较可能先保留判断",
-                        }.get(stance, "较可能先保留判断")
-                        tendency_scope = (
-                            "人物同领域公开倾向"
-                            if basis.get("scope_match") == "same_event_type"
-                            else "人物整体公开倾向"
-                        )
-                        rendered = (
-                            f"仅根据{tendency_scope}，这个人在当前问题上{direction}。"
-                            "由于没有找到足够相似的具体事件，具体论证需要选择对话模型后由外部知识补充。"
-                        )
+                    gate_ok, gate_reason = self._gate_unified_response(unified, artifact)
+                    generation_trace = {
+                        "status": (
+                            "unified_person_response" if gate_ok else "unified_gate_failed"
+                        ),
+                        "model_calls": int(unified.get("model_calls", 0)),
+                        "gate_reason": gate_reason,
+                    }
+                    if unified["status"] == "ok" and gate_ok:
+                        rendered = unified["answer"]
+                        style_status = "unified_person_generation"
+                        style_gate = {
+                            "status": "unified_person_generation",
+                            "changed": False,
+                        }
+                        base["knowledge_source"] = "unified_model_derivation"
+                        base["person_prediction_status"] = "unified_tendency_derivation"
+                        structured["stance"] = {
+                            "label": unified["stance"],
+                            "probability": 0.0,
+                        }
+                        structured["response_basis"] = {
+                            "path": "unified_person_response",
+                            "person_prediction_status": "unified_tendency_derivation",
+                            "question_type": unified["question_type"],
+                            "tendency_ids": unified["tendency_ids"],
+                        }
+                    else:
+                        rendered = str(basis.get("prediction_statement", "")).strip() or "我会先保留判断。"
+                        style_status = "unified_gate_failed"
+                        style_gate = {
+                            "status": "unified_gate_failed",
+                            "reason": gate_reason,
+                        }
+                        base["knowledge_source"] = "none"
                     generated_neutral = rendered
-                    rendered, style_status, style_gate = self._style_generated_answer(
-                        person_id, rendered, structured
-                    )
-                    render_calls = int(generation_trace.get("model_calls", 0))
+                    render_calls = int(unified.get("model_calls", 0))
                     validation_calls = 0
-                    base["knowledge_source"] = (
-                        "external_model_briefing" if render_calls else "none"
-                    )
                 else:
                     # Direct and similar-event answers already contain frozen,
                     # evidence-backed wording and therefore already exhibit the

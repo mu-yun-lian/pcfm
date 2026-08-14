@@ -401,6 +401,18 @@ class V5ModelFixture:
                 ),
                 "snapshot": self.snapshot(""),
             }
+        if "first-person response" in system:
+            return {
+                "text": json.dumps(
+                    {
+                        "question_type": "policy_stance",
+                        "stance": "support",
+                        "tendency_ids": [],
+                        "answer": "I would prioritize safety here.",
+                    }
+                ),
+                "snapshot": self.snapshot(""),
+            }
         material = str(payload["material"])
         domain = "health" if "hospital" in material.casefold() else "product"
         return {
@@ -525,11 +537,12 @@ class SimulationV5ProductIntegrationTests(unittest.TestCase):
             "Would you support a new aviation safety rule if it slows deployment?",
             dialogue_model_ref="fake:model",
         )
-        self.assertEqual("orientation_projection_answer", reply["answer_status"])
+        # 新架构：推导类问题走一次 LLM 统一推导（不再单独 planning）
+        self.assertEqual("general_assisted", reply["answer_status"])
         self.assertEqual("simulation-v5", reply["prediction_trace"]["kernel"])
-        self.assertEqual(1, reply["model_usage"]["planning_calls"])
+        self.assertEqual(0, reply["model_usage"]["planning_calls"])
         self.assertEqual(1, reply["model_usage"]["generation_calls"])
-        self.assertTrue(reply["text"].startswith("I would support"))
+        self.assertTrue(reply["text"].startswith("I would prioritize safety"))
         self.assertEqual(
             "pcfm_conversation_conditioned_response_simulation_v5",
             reply["model_kind"],
