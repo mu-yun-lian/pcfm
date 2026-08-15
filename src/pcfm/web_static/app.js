@@ -774,7 +774,7 @@ async function loadSessions() {
 
 function wire() {
   $("#person-search").oninput=renderPeople;
-  ["#new-person","#new-person-small","#empty-create"].forEach(id=>$(id).onclick=()=>openPersonDialog(false));
+  ["#new-person","#empty-create"].forEach(id=>$(id).onclick=()=>openPersonDialog(false));
   $("#message-form").onsubmit=sendMessage;
   $("#message-form textarea").onkeydown=event=>{ if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("#message-form").requestSubmit($("#message-form .send-button"));} };
   $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();

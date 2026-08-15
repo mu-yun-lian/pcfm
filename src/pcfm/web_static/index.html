@@ -8,74 +8,88 @@
 </head>
 <body>
   <div id="version-banner" class="version-banner" hidden>页面与本地服务版本不一致，请重启本地服务。<button id="refresh-page" type="button">重新检查</button></div>
-  <header class="topbar">
-    <div class="brand"><strong>PCFM</strong><div><h1>人物响应模型</h1><p>从真实资料出发，进行有证据边界的多轮交流。</p></div></div>
-    <div class="top-actions">
-      <label class="search"><span>人物检索</span><input id="person-search" type="search" placeholder="搜索人物或最近对话"></label>
-      <button class="button outline-on-dark" id="new-person">新建人物</button>
-      <span class="local-status">数据仅保存在本机</span>
-    </div>
-  </header>
 
   <div class="app-shell">
     <aside class="people-panel">
-      <div class="panel-title"><h2>人物库</h2><button class="square-button" id="new-person-small" aria-label="新建人物">新增</button></div>
+      <div class="sidebar-brand"><span class="brand-wordmark">PCFM</span><span class="brand-sub">对话式人物模拟</span></div>
+      <button class="button primary new-person-btn" id="new-person">＋ 新建人物</button>
+      <label class="sidebar-search">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="13.6" y1="13.6" x2="18" y2="18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <input id="person-search" type="search" placeholder="搜索人物或最近对话">
+      </label>
       <div id="people-list" class="people-list"></div>
       <div class="people-empty" id="people-empty" hidden>还没有人物。新建人物后，为他添加原始资料即可开始。</div>
       <div class="people-footer">
-        <button class="text-button" id="import-backup">加载人物备份</button>
         <div class="archive-drop-zone" id="archive-drop-zone" aria-label="人物归档拖放区">
-          <button class="text-button" id="open-archive">人物归档 <span id="archive-count" class="count-badge">0</span></button>
+          <button class="footer-link" id="open-archive">人物归档 <span id="archive-count" class="count-badge">0</span></button>
           <small id="archive-drop-hint">也可以把人物卡片拖到这里</small>
         </div>
+        <button class="footer-link" id="import-backup">加载人物备份</button>
         <input id="backup-file" type="file" accept="application/json" hidden>
-        <p>人物之间的资料、会话、版本和优化记录完全隔离。</p>
+        <p class="footer-note">数据仅保存在本机 · 人物间资料完全隔离</p>
       </div>
     </aside>
 
     <main class="chat-panel">
       <section class="empty-chat" id="empty-chat">
-        <img src="/default-person-avatar.png" alt="默认人物头像">
-        <p class="kicker">对话式人物模拟 MVP</p>
-        <h2>选择一个人物，直接开始交流</h2>
-        <p>系统先综合完整对话状态、历史事件和人物公开取向；大模型负责语义理解与知识补充，人物方向由审核证据和代码门禁决定。</p>
-        <button class="button primary" id="empty-create">创建第一个人物</button>
+        <div class="empty-inner">
+          <p class="kicker">PCFM · 对话式人物模拟</p>
+          <h2>选择或新建一个人物</h2>
+          <p>从真实资料出发，进行有证据边界的多轮交流。</p>
+          <button class="button primary" id="empty-create">创建第一个人物</button>
+        </div>
       </section>
 
       <section id="chat-workspace" class="chat-workspace" hidden>
         <header class="chat-header">
           <div class="person-heading">
             <img id="chat-avatar" src="/default-person-avatar.png" alt="人物头像">
-            <div><h2 id="chat-person-name"></h2><p><span id="chat-version">未建立版本</span><span class="dot">·</span><span id="chat-source-count">0 份资料</span></p></div>
+            <div class="person-heading-text">
+              <h2 id="chat-person-name"></h2>
+              <p><span id="chat-version">未建立版本</span><span class="dot">·</span><span id="chat-source-count">0 份资料</span></p>
+            </div>
           </div>
-          <div class="session-bar">
-            <span class="session-title" id="session-title">新对话</span>
+          <div class="header-right">
+            <button type="button" id="session-title" class="session-title" onclick="document.getElementById('open-sessions').click()">新对话</button>
             <span class="session-count" id="session-count">0 条消息</span>
-          </div>
-          <div class="header-actions">
             <span class="model-state" id="chat-model-state"></span>
-            <button class="button quiet" id="new-conversation">新对话</button>
-            <button class="button quiet" id="open-sessions">历史会话</button>
-            <button class="button secondary" id="open-sources">人物资料</button>
-            <button class="button quiet" id="open-versions">版本</button>
-            <button class="button quiet" id="open-advanced">高级</button>
+            <details class="menu">
+              <summary aria-label="更多操作">⋯</summary>
+              <div class="menu-body">
+                <button type="button" id="new-conversation">新对话</button>
+                <button type="button" id="open-sessions">历史会话</button>
+                <button type="button" id="open-sources">人物资料</button>
+                <button type="button" id="open-versions">版本</button>
+                <button type="button" id="open-advanced">高级</button>
+                <button type="button" class="menu-model" onclick="document.getElementById('open-model-picker').click()">模型</button>
+              </div>
+            </details>
           </div>
         </header>
 
-        <div class="trust-strip"><strong>分层预测</strong><span>非生成式人物模型先预测回应动作、立场、主张和理由，再由独立表达层改写；准确性未验证时只标记为探索性。</span></div>
-        <p class="collection-status" id="collection-status"></p>
+        <details class="model-status" id="model-status">
+          <summary>模型状态</summary>
+          <div class="model-status-body">
+            <p class="trust-note">分层预测：非生成式人物模型先预测回应动作、立场、主张和理由，再由独立表达层改写；准确性未验证时只标记为探索性。</p>
+            <p class="collection-status" id="collection-status"></p>
+          </div>
+        </details>
+
         <div class="messages" id="messages"></div>
 
         <footer class="composer-wrap">
           <form id="message-form" class="composer">
-            <textarea name="text" rows="3" placeholder="直接对这个人物说话（Enter 发送，Shift+Enter 换行）" required></textarea>
-            <div class="composer-bottom">
-              <div class="composer-options">
-                <button type="button" class="text-button" id="composer-add-source">添加资料</button>
-                <button type="button" class="model-picker-button" id="open-model-picker">未选择对话模型 ▾</button>
-                <label class="lookup-switch"><input type="checkbox" name="reality_lookup"><span>本次查找并对照现实回答</span><small>可能增加耗时和费用</small></label>
-              </div>
-              <button class="button primary send-button" type="submit">发送</button>
+            <div class="composer-row">
+              <textarea name="text" rows="1" placeholder="直接对这个人物说话（Enter 发送，Shift+Enter 换行）" required></textarea>
+              <details class="composer-tools">
+                <summary aria-label="更多选项" title="更多选项">＋</summary>
+                <div class="composer-tools-body">
+                  <button type="button" class="tool-item" id="composer-add-source">添加资料</button>
+                  <button type="button" class="tool-item model-picker-button" id="open-model-picker">未选择对话模型 ▾</button>
+                  <label class="lookup-switch"><input type="checkbox" name="reality_lookup"><span>本次查找并对照现实回答</span><small>可能增加耗时和费用</small></label>
+                </div>
+              </details>
+              <button class="send-button" type="submit">发送</button>
             </div>
           </form>
           <p class="composer-status" id="composer-status" role="status" hidden></p>
