@@ -265,6 +265,67 @@ def _value_orientations(
         )
     return orientations
 
+def _domain_tendency_index(
+    preference_atoms: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, list[dict[str, object]]]]:
+    """按领域聚合偏好原子，构建『领域 → 该领域的价值倾向概括』画像。
+
+    这是建模阶段的静态产物，是"整体倾向（不同领域）"的落地：
+    - tradeoffs：按（守护价值 × 牺牲代价）去重聚合，带出现次数与代表原话
+    - evaluations：按（对象 × 立场）去重聚合，带出现次数与代表原话
+    回答时 LLM 先定位问题领域，再读该领域的聚合倾向——不是平铺的原始原子，
+    而是"这个人在这个领域倾向什么、反对什么、怎么说的"的概括。
+    """
+    index: dict[str, dict[str, dict[str, object]]] = {}
+    for atom in preference_atoms:
+        domains = atom.get("domain_tags", [])
+        if not domains:
+            continue
+        atom_id = str(atom.get("preference_atom_id", ""))
+        reason = str((atom.get("reasons") or [""])[0])[:160]
+        direction = str(atom.get("direction", ""))
+        if direction:
+            kind = "evaluations"
+            key = (str(atom.get("target", "").strip()), direction)
+            entry = {
+                "target": str(atom.get("target", "").strip()),
+                "direction": direction,
+                "tendency_type": str(atom.get("tendency_type", "")),
+                "protected_interest_id": str(atom.get("protected_interest_id", "")),
+            }
+        else:
+            kind = "tradeoffs"
+            key = (
+                str(atom.get("protected_interest_id", "")),
+                str(atom.get("accepted_cost_id", "")),
+            )
+            entry = {
+                "protected_interest_id": str(atom.get("protected_interest_id", "")),
+                "accepted_cost_id": str(atom.get("accepted_cost_id", "")),
+                "tendency_type": str(atom.get("tendency_type", "")),
+            }
+        for domain in domains:
+            bucket = index.setdefault(str(domain), {}).setdefault(kind, {})
+            if key not in bucket:
+                bucket[key] = {
+                    **entry,
+                    "count": 0,
+                    "atom_ids": [],
+                    "example_reason": reason or str(atom.get("evidence_span", ""))[:160],
+                }
+            bucket[key]["count"] += 1
+            if atom_id:
+                bucket[key]["atom_ids"].append(atom_id)
+    result: dict[str, dict[str, list[dict[str, object]]]] = {}
+    for domain, kinds in index.items():
+        result[domain] = {}
+        for kind in ("tradeoffs", "evaluations"):
+            values = list(kinds.get(kind, {}).values())
+            values.sort(key=lambda item: -int(item.get("count", 0)))
+            result[domain][kind] = values
+    return result
+
+
 
 class SimulationKernelV5:
     kernel_id = KERNEL_ID_V5
@@ -336,6 +397,9 @@ class SimulationKernelV5:
         )
         value_atoms = _value_atoms(episode_frames)
         value_orientation_index = _value_orientations(value_atoms)
+        domain_tendency_index = _domain_tendency_index(
+            list(reviewed.get("preference_atoms", []))
+        )
         payload = {
             "reviewed_public_model": reviewed,
             "event_frames": episode_frames,
@@ -344,6 +408,7 @@ class SimulationKernelV5:
             ),
             "value_atoms": value_atoms,
             "value_orientation_index": value_orientation_index,
+            "domain_tendency_index": domain_tendency_index,
             "knowledge_claims": copy.deepcopy(
                 list(reviewed.get("knowledge_claims", []))
             ),

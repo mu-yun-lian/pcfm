@@ -47,6 +47,7 @@ from .response_prediction_v2 import (
 from .simulation_v4 import (
     DOMAIN_ALIASES,
     INTERESTS,
+    OBJECT_CATEGORIES,
     REVIEWED_EVENT_SCHEMA_V4,
 )
 from .simulation_v5 import (
@@ -1142,8 +1143,10 @@ class ConversationWorkbench:
             "protected_interest_span, accepted_cost_span, and evidence_span. "
             "For evaluation tendencies (object_evaluation, behavior_evaluation, "
             "responsibility_attribution), also return direction (one of the supplied "
-            "allowed_stances) and target (the evaluated object, copied verbatim from "
-            "the material); accepted_cost_id may be empty for those. "
+            "allowed_stances), target (the evaluated object's CATEGORY, one of the "
+            "supplied allowed_object_categories — e.g. a company/person/product, NOT "
+            "the specific name), and target_span (the specific object name copied "
+            "verbatim from the material). accepted_cost_id may be empty for those. "
             "tendency_type must be one of the supplied allowed_tendency_type_ids. "
             "event_structure_type must be one of the supplied allowed_event_structure_type_ids, "
             "or empty when the decision structure is unclear. "
@@ -1170,6 +1173,7 @@ class ConversationWorkbench:
                                     "allowed_domain_ids": sorted(DOMAIN_ALIASES),
                                     "allowed_tendency_type_ids": sorted(TENDENCY_TYPES),
                                     "allowed_stances": sorted(STANCES),
+                                    "allowed_object_categories": sorted(OBJECT_CATEGORIES),
                                     "allowed_event_structure_type_ids": sorted(EVENT_STRUCTURE_TYPES),
                                     "material": chunk,
                                 },
@@ -1386,6 +1390,9 @@ class ConversationWorkbench:
                 or (is_evaluation and (not cost or cost in INTERESTS))
             )
             direction_valid = (not is_evaluation) or direction in STANCES
+            target_valid = (not is_evaluation) or (
+                str(tradeoff.get("target", "")).strip() in OBJECT_CATEGORIES
+            )
             required_spans = [
                 str(tradeoff.get("protected_interest_span", "")),
                 str(tradeoff.get("evidence_span", "")),
@@ -1405,6 +1412,7 @@ class ConversationWorkbench:
                 tendency_type not in TENDENCY_TYPES
                 or not interest_valid
                 or not direction_valid
+                or not target_valid
                 or not spans_valid
             ):
                 raise ConversationError(
@@ -2754,35 +2762,9 @@ class ConversationWorkbench:
         identity_note = str(
             dict(artifact.get("scope", {})).get("identity_note", "")
         ).strip()
-        # 价值倾向原子（完整细分维度 + 领域标签），供 LLM 语义匹配；不再字面匹配事件原文
-        preference_atoms = [
-            {
-                "preference_atom_id": str(item.get("preference_atom_id", "")),
-                "tendency_type": str(item.get("tendency_type", "")),
-                "direction": str(item.get("direction", "")),
-                "target": str(item.get("target", "")),
-                "protected_interest_id": str(item.get("protected_interest_id", "")),
-                "accepted_cost_id": str(item.get("accepted_cost_id", "")),
-                "event_structure_type": str(item.get("event_structure_type", "")),
-                "domain_tags": list(item.get("domain_tags", [])),
-            }
-            for item in dict(artifact.get("reviewed_public_model", {})).get(
-                "preference_atoms", []
-            )
-        ]
-        # 领域画像（价值取向索引）：按领域聚合的整体倾向，供 LLM 定位领域与概览
-        value_orientations = [
-            {
-                "orientation_id": str(item.get("orientation_id", "")),
-                "interest_id": str(item.get("interest_id", "")),
-                "primary_domains": list(item.get("primary_domains", [])),
-                "support": float(item.get("support", 0.0)),
-                "independent_source_count": int(
-                    item.get("independent_source_count", 0)
-                ),
-            }
-            for item in artifact.get("value_orientation_index", [])
-        ]
+        # 领域倾向画像：领域 → 该领域的价值倾向（含原话），供 LLM 定位领域并匹配。
+        # 这是建模阶段预构建的整体倾向（分领域），回答时按领域"查"，不现算。
+        domain_tendency_index = artifact.get("domain_tendency_index", {})
         payload = {
             "person_identity": identity_note,
             "question": text,
@@ -2792,8 +2774,7 @@ class ConversationWorkbench:
                 if item.get("role") in {"user", "assistant"}
             ],
             "conversation_state": copy.deepcopy(dict(conversation_context or {})),
-            "preference_atoms": preference_atoms,
-            "value_orientations": value_orientations,
+            "domain_tendency_index": domain_tendency_index,
             "allowed_tendency_types": sorted(TENDENCY_TYPES),
             "allowed_interests": sorted(INTERESTS),
             "allowed_stances": sorted(STANCES),
@@ -2802,12 +2783,15 @@ class ConversationWorkbench:
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
-            "Match the question to the supplied tendency atoms first: preference_atoms "
-            "carry domain_tags (the domain), tendency_type, direction/target or "
-            "protected/accepted interest, and event_structure_type; value_orientations "
-            "are a per-domain summary of the person's tendencies. Derive the stance "
-            "from these matched atoms, NOT from general world knowledge. "
-            "Return JSON with exactly question_type, stance, tendency_ids, and answer. "
+            "domain_tendency_index is this person's tendency profile grouped by domain "
+            "(economics, governance, product, technology, personal, education, …); "
+            "each domain has tradeoffs (value X over cost Y, with occurrence count) and "
+            "evaluations (stance toward a target, with occurrence count). example_reason "
+            "is the person's own wording. First identify the question's domain, then "
+            "answer from that domain's profile: the person's actual wording, tone and "
+            "sharpness are in example_reason — mimic them, do NOT soften into a bland "
+            "'I'm concerned'. Return JSON with exactly question_type, stance, "
+            "tendency_ids, and answer. "
             "style_hints lists the person's characteristic opening/connector phrases "
             "in their source language. Express them in the answer's language — if "
             "answering in Chinese, translate English connectives to natural Chinese "
@@ -2816,8 +2800,9 @@ class ConversationWorkbench:
             "an English connective into a Chinese answer. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
-            "stance is one of the allowed_stances. tendency_ids lists only the supplied "
-            "preference_atom/orientation IDs you actually relied on. "
+            "stance is one of the allowed_stances. tendency_ids lists only the "
+            "atom_ids values from the domain_tendency_index entries you actually "
+            "relied on. "
             "answer is the person's first-person reply, in the SAME language as the "
             "question, under 1200 characters. Never add biography, memories, personal "
             "experiences, attributed facts, numbers, dates, or quotations not present "

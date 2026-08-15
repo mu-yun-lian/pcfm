@@ -77,6 +77,20 @@ DOMAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "personal": ("family", "friend", "relationship", "private", "家庭", "朋友", "关系", "私人"),
 }
 
+# 对象类别：把评价类倾向的目标对象从"具体名字"抽象为"类别"，
+# 使价值倾向可跨对象迁移（问苹果/谷歌/微软都能命中"反对大公司官僚化"）。
+OBJECT_CATEGORIES: tuple[str, ...] = (
+    "organization",      # 组织 / 公司 / 企业
+    "individual",        # 个人 / 人物
+    "product",           # 产品 / 作品 / 项目
+    "institution",       # 机构（学校、政府、法院等）
+    "market",            # 市场 / 行业 / 商业环境
+    "technology",        # 技术 / 工具 / 系统
+    "group",             # 团队 / 群体 / 一代人
+    "behavior",          # 行为 / 做法 / 方式
+    "abstract_concept",  # 抽象概念（金钱、价值观、理念）
+)
+
 
 class SimulationV4Error(ValueError):
     pass
