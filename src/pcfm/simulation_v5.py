@@ -267,101 +267,69 @@ def _value_orientations(
 
 def _domain_tendency_index(
     preference_atoms: Sequence[Mapping[str, object]],
-) -> dict[str, dict[str, list[dict[str, object]]]]:
-    """按领域聚合偏好原子，构建『领域 → 该领域的价值倾向概括』画像。
+) -> dict[str, dict[str, dict[str, object]]]:
+    """构建 A 层「领域价值倾向」画像。
 
-    这是建模阶段的静态产物，是"整体倾向（不同领域）"的落地：
-    - tradeoffs：按（守护价值 × 牺牲代价）去重聚合，带出现次数与代表原话
-    - evaluations：按（对象 × 立场）去重聚合，带出现次数与代表原话
-    回答时 LLM 先定位问题领域，再读该领域的聚合倾向——不是平铺的原始原子，
-    而是"这个人在这个领域倾向什么、反对什么、怎么说的"的概括。
+    结构：领域 → 事件结构（细分类型）→ {价值倾向概括 + 具体原子(B层)}。
+    - 价值倾向概括：该细分下这个人倾向什么（主导价值）、反对/支持什么对象类别。
+    - 具体原子：该细分下的伴随原子（含原话），供回答时"落回 B 层找同类内容"。
+    这是"所有伴随原子综合出该领域的价值倾向"——不是一句话，而是
+    按细分类型组织的结构化倾向，每个细分能回溯到具体原子。
     """
-    index: dict[str, dict[str, dict[str, object]]] = {}
+    from collections import Counter
+
+    profile: dict[str, dict[str, dict[str, object]]] = {}
     for atom in preference_atoms:
         domains = atom.get("domain_tags", [])
         if not domains:
             continue
+        structure = str(atom.get("event_structure_type", "") or "unclassified")
         atom_id = str(atom.get("preference_atom_id", ""))
         reason = str((atom.get("reasons") or [""])[0])[:160]
         direction = str(atom.get("direction", ""))
-        if direction:
-            kind = "evaluations"
-            key = (str(atom.get("target", "").strip()), direction)
-            entry = {
-                "target": str(atom.get("target", "").strip()),
-                "direction": direction,
-                "tendency_type": str(atom.get("tendency_type", "")),
-                "protected_interest_id": str(atom.get("protected_interest_id", "")),
-            }
-        else:
-            kind = "tradeoffs"
-            key = (
-                str(atom.get("protected_interest_id", "")),
-                str(atom.get("accepted_cost_id", "")),
-            )
-            entry = {
-                "protected_interest_id": str(atom.get("protected_interest_id", "")),
-                "accepted_cost_id": str(atom.get("accepted_cost_id", "")),
-                "tendency_type": str(atom.get("tendency_type", "")),
-            }
+        target = str(atom.get("target", "").strip())
         for domain in domains:
-            bucket = index.setdefault(str(domain), {}).setdefault(kind, {})
-            if key not in bucket:
-                bucket[key] = {
-                    **entry,
-                    "count": 0,
-                    "atom_ids": [],
-                    "example_reason": reason or str(atom.get("evidence_span", ""))[:160],
+            cell = profile.setdefault(str(domain), {}).setdefault(
+                structure,
+                {
+                    "values": Counter(),
+                    "opposes": set(),
+                    "supports": set(),
+                    "atoms": [],
+                },
+            )
+            cell["values"][str(atom.get("protected_interest_id", ""))] += 1
+            if direction == "oppose" and target:
+                cell["opposes"].add(target)
+            elif direction == "support" and target:
+                cell["supports"].add(target)
+            cell["atoms"].append(
+                {
+                    "atom_id": atom_id,
+                    "tendency_type": str(atom.get("tendency_type", "")),
+                    "direction": direction,
+                    "target": target,
+                    "protected_interest_id": str(atom.get("protected_interest_id", "")),
+                    "accepted_cost_id": str(atom.get("accepted_cost_id", "")),
+                    "reason": reason or str(atom.get("evidence_span", ""))[:160],
                 }
-            bucket[key]["count"] += 1
-            if atom_id:
-                bucket[key]["atom_ids"].append(atom_id)
-    result: dict[str, dict[str, list[dict[str, object]]]] = {}
-    for domain, kinds in index.items():
+            )
+    result: dict[str, dict[str, dict[str, object]]] = {}
+    for domain, structures in profile.items():
         result[domain] = {}
-        for kind in ("tradeoffs", "evaluations"):
-            values = list(kinds.get(kind, {}).values())
-            values.sort(key=lambda item: -int(item.get("count", 0)))
-            result[domain][kind] = values
-        result[domain]["summary"] = _summarize_domain(result[domain])
+        for structure, cell in structures.items():
+            result[domain][structure] = {
+                "dominant_value": (
+                    max(cell["values"], key=lambda k: cell["values"][k])
+                    if cell["values"]
+                    else ""
+                ),
+                "opposes": sorted(cell["opposes"]),
+                "supports": sorted(cell["supports"]),
+                "atoms": cell["atoms"],
+            }
     return result
 
-def _summarize_domain(kinds: Mapping[str, object]) -> dict[str, object]:
-    """从一个领域的 tradeoffs/evaluations 归纳出价值原则概括（A 层）。
-
-    这是"多个 B 层伴随原子组合推导 A 层"：从碎片里归纳出
-    「这个人在这里倾向什么（主导价值）、反对什么、支持什么」。
-    """
-    tradeoffs = list(kinds.get("tradeoffs", []))
-    evaluations = list(kinds.get("evaluations", []))
-    top = tradeoffs[0] if tradeoffs else None
-    value_counts: dict[str, int] = {}
-    for item in tradeoffs:
-        key = str(item.get("protected_interest_id", ""))
-        value_counts[key] = value_counts.get(key, 0) + int(item.get("count", 0))
-    dominant = max(value_counts, key=lambda k: value_counts[k]) if value_counts else ""
-    opposes: list[str] = []
-    supports: list[str] = []
-    for item in evaluations:
-        target = str(item.get("target", ""))
-        direction = str(item.get("direction", ""))
-        if direction == "oppose" and target and target not in opposes:
-            opposes.append(target)
-        elif direction == "support" and target and target not in supports:
-            supports.append(target)
-    return {
-        "core_principle": (
-            {
-                "protected": str(top["protected_interest_id"]),
-                "cost": str(top["accepted_cost_id"]),
-            }
-            if top
-            else None
-        ),
-        "dominant_value": dominant,
-        "opposes": opposes,
-        "supports": supports,
-    }
 
 
 
