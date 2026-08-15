@@ -102,13 +102,16 @@
     <form class="dialog-card" id="person-form">
       <div class="dialog-head"><div><p class="kicker">独立人物空间</p><h2>新建人物</h2></div><button type="button" class="close-button" data-close="person-dialog">关闭</button></div>
       <label>人物名称（必填）<input name="name" required placeholder="例如：Steve Jobs"></label>
-      <label>资料来源方式（必填）<select name="source_mode" required><option value="system_search" disabled>系统自动搜索公开资料（暂未配置）</option><option value="user_provided" selected>我自行提供原始资料</option></select></label>
-      <label>身份或消歧说明（选填）<input name="identity_note" placeholder="例如：Apple 联合创始人，1955—2011"></label>
-      <label>别名（选填，逗号分隔）<input name="aliases" placeholder="史蒂夫·乔布斯, Jobs"></label>
-      <div class="two-cols"><label>主要语言（选填）<select name="language"><option value="zh">中文</option><option value="en">English</option><option value="mixed">中英混合</option></select></label><label>重点领域（选填）<input name="focus_domain" placeholder="例如：产品发布与设计"></label></div>
-      <div class="two-cols"><label>头像地址（选填）<input name="avatar" type="url" placeholder="https://..."></label><label>简短备注（选填）<input name="notes" placeholder="不参与人物预测"></label></div>
-      <label>说明（选填）<input name="description" placeholder="材料范围或研究用途"></label>
-      <div class="two-cols"><label>资料起始时间（选填）<input name="time_start" type="date"></label><label>资料结束时间（选填）<input name="time_end" type="date"></label></div>
+      <details class="advanced-fields">
+        <summary>更多选项（可后改）</summary>
+        <label>资料来源方式（必填）<select name="source_mode" required><option value="system_search" disabled>系统自动搜索公开资料（暂未配置）</option><option value="user_provided" selected>我自行提供原始资料</option></select></label>
+        <label>身份或消歧说明（选填）<input name="identity_note" placeholder="例如：Apple 联合创始人，1955—2011"></label>
+        <label>别名（选填，逗号分隔）<input name="aliases" placeholder="史蒂夫·乔布斯, Jobs"></label>
+        <div class="two-cols"><label>主要语言（选填）<select name="language"><option value="zh">中文</option><option value="en">English</option><option value="mixed">中英混合</option></select></label><label>重点领域（选填）<input name="focus_domain" placeholder="例如：产品发布与设计"></label></div>
+        <div class="two-cols"><label>头像地址（选填）<input name="avatar" type="url" placeholder="https://..."></label><label>简短备注（选填）<input name="notes" placeholder="不参与人物预测"></label></div>
+        <label>说明（选填）<input name="description" placeholder="材料范围或研究用途"></label>
+        <div class="two-cols"><label>资料起始时间（选填）<input name="time_start" type="date"></label><label>资料结束时间（选填）<input name="time_end" type="date"></label></div>
+      </details>
       <p class="plain-notice" id="person-source-notice">系统自动搜索暂未配置。请粘贴文本、上传文件或输入网页地址，系统会自动整理为待审核资料。</p>
       <div class="dialog-actions"><button type="button" class="button quiet" data-close="person-dialog">取消</button><button class="button primary" type="submit">创建人物</button></div>
     </form>
@@ -156,21 +159,24 @@
       <div class="dialog-head"><div><p class="kicker">原始资料与角色隔离</p><h2>管理人物资料</h2></div><button type="button" class="close-button" data-close="sources-dialog">关闭</button></div>
       <div class="source-entry-grid">
         <form id="paste-source-form" class="source-form">
-          <fieldset class="evidence-contract-fields">
-            <legend>证据核验信息</legend>
-            <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
-            <label>原始材料位置<input name="source_locator" placeholder="例如：视频 12:30–13:05，或逐字稿第 10–12 段"></label>
-            <label>来源网址<input name="source_url" type="url" placeholder="https://..."></label>
-            <label>当时上下文<input name="source_context" placeholder="公开访谈、演讲或其他场合"></label>
-            <label>翻译对应的原文位置<input name="translation_of" placeholder="仅准确翻译需要填写"></label>
-          </fieldset>
           <h3>粘贴文本</h3>
           <label>标题<input name="title" required placeholder="访谈、演讲或文章名称"></label>
           <label>说话人<input name="speaker" required></label>
-          <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
-          <label>日期<input name="source_date" type="date"></label>
-          <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
-          <label>原始内容<textarea name="text" rows="7" required placeholder="可粘贴完整文章、访谈、问答或其他原始材料"></textarea></label>
+          <label>原始内容<textarea name="text" rows="6" required placeholder="可粘贴完整文章、访谈、问答或其他原始材料"></textarea></label>
+          <details class="advanced-fields">
+            <summary>证据核验与用途（可选）</summary>
+            <fieldset class="evidence-contract-fields">
+              <legend>证据核验信息</legend>
+              <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
+              <label>原始材料位置<input name="source_locator" placeholder="例如：视频 12:30–13:05，或逐字稿第 10–12 段"></label>
+              <label>来源网址<input name="source_url" type="url" placeholder="https://..."></label>
+              <label>当时上下文<input name="source_context" placeholder="公开访谈、演讲或其他场合"></label>
+              <label>翻译对应的原文位置<input name="translation_of" placeholder="仅准确翻译需要填写"></label>
+            </fieldset>
+            <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
+            <label>日期<input name="source_date" type="date"></label>
+            <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
+          </details>
           <button class="button primary" type="submit">保存为待审核资料</button>
         </form>
         <div class="other-source-forms">
@@ -179,22 +185,28 @@
             <p>支持 TXT、Markdown、HTML、SRT/VTT 字幕、JSON、CSV 和带文字层 PDF；音视频转写与扫描件 OCR 尚未配置。</p>
             <label>文件<input name="file" type="file" accept=".txt,.md,.markdown,.html,.htm,.srt,.vtt,.json,.csv,.pdf" required></label>
             <label>说话人<input name="speaker" required></label>
-            <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
-            <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿或本人原文</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
-            <label>原始材料位置<input name="source_locator" placeholder="页码、段落或时间码"></label>
-            <label>当时上下文<input name="source_context" placeholder="演讲、文章、访谈等"></label>
-            <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
+            <details class="advanced-fields">
+              <summary>证据核验与用途（可选）</summary>
+              <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
+              <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿或本人原文</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
+              <label>原始材料位置<input name="source_locator" placeholder="页码、段落或时间码"></label>
+              <label>当时上下文<input name="source_context" placeholder="演讲、文章、访谈等"></label>
+              <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
+            </details>
             <button class="button secondary" type="submit">上传并提取</button>
           </form>
           <form id="url-source-form" class="source-form compact-source">
             <h3>网页地址</h3>
             <label>网址<input name="url" type="url" required placeholder="https://..."></label>
             <label>说话人<input name="speaker" required></label>
-            <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
-            <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿或本人原文</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
-            <label>原始材料位置<input name="source_locator" placeholder="网页段落、章节或时间码"></label>
-            <label>当时上下文<input name="source_context" placeholder="演讲、文章、访谈等"></label>
-            <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
+            <details class="advanced-fields">
+              <summary>证据核验与用途（可选）</summary>
+              <label>说话人范围<select name="speaker_scope"><option value="single_speaker_entire_document">整份材料主要由该人物表达</option><option value="mixed_speakers">多人混合，逐段确认后再采用</option></select></label>
+              <label>内容真实性<select name="content_authenticity"><option value="unverified_material">尚未核验的材料</option><option value="verbatim_transcript">已核验逐字稿或本人原文</option><option value="verified_translation">有原文对应的准确翻译</option><option value="editorial_summary">编辑或研究者摘要</option></select></label>
+              <label>原始材料位置<input name="source_locator" placeholder="网页段落、章节或时间码"></label>
+              <label>当时上下文<input name="source_context" placeholder="演讲、文章、访谈等"></label>
+              <label>数据用途<select name="dataset_role"><option value="model_source">参数训练</option><option value="applicability_reference">适用性校准</option><option value="feature_discovery">特征发现</option><option value="candidate_selection">候选模型选择</option><option value="final_holdout">封存最终验证</option><option value="post_deployment_monitoring">上线后监测</option><option value="reference_only">外部现实回答对照</option></select></label>
+            </details>
             <button class="button secondary" type="submit">抓取网页快照</button>
           </form>
           <div class="network-note"><strong>系统联网收集</strong><p>当前没有配置“只凭人物姓名自动搜索”的联网后端，因此不会显示成已可用。直接网址采集已经可用。</p></div>

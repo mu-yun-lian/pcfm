@@ -20,3 +20,4 @@ dialog{width:min(620px,calc(100vw - 36px));padding:0;border:0;border-radius:14px
 
 @media (max-width:760px){.model-current-row,.model-choice{align-items:stretch;flex-direction:column}.model-choice button{width:100%}.model-settings .two-cols{grid-template-columns:1fr}}
 .candidate-box{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:7px;background:var(--paper-2)}.candidate-box blockquote{margin:7px 0;font:13px/1.6 system-ui,sans-serif}.candidate-box small{color:var(--muted);font:11px/1.5 system-ui,sans-serif}
+.advanced-fields{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.advanced-fields>summary{cursor:pointer;color:var(--green);font:600 13px system-ui,sans-serif;margin-bottom:10px}
