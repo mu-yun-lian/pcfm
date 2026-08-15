@@ -299,6 +299,23 @@ class ConversationWorkbench:
         self._predictor = ResponsePredictionKernelV2()
         self._simulation_predictor = SimulationKernelV5()
         self._model_services = model_services
+        self._report_cache: dict[tuple, object] = {}
+
+    @staticmethod
+    def _file_tag(path: Path) -> tuple:
+        try:
+            stat = path.stat()
+            return (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            return (0, 0)
+
+    def _simulation_files_tag(self, person_id: str, version_number: int) -> tuple:
+        return (
+            self._file_tag(self._simulation_model_path(person_id, int(version_number))),
+            self._file_tag(self._path(person_id, "conversation_sources.json")),
+            self._file_tag(self._path(person_id, "conversation_profile.json")),
+            self._file_tag(self._path(person_id, "conversation_versions.json")),
+        )
 
     def _person_dir(self, person_id: str) -> Path:
         path = (self.people_dir / person_id).resolve()
@@ -1576,6 +1593,15 @@ class ConversationWorkbench:
     def _simulation_model(
         self, person_id: str, version_number: int
     ) -> dict[str, object]:
+        cache_key = (
+            "simulation_model",
+            str(person_id),
+            int(version_number),
+            self._simulation_files_tag(person_id, version_number),
+        )
+        cached = self._report_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
         path = self._simulation_model_path(person_id, version_number)
         raw = _read_json(path, {}) if path.exists() else {}
         needs_refit = (
@@ -1658,6 +1684,7 @@ class ConversationWorkbench:
             _write_json(
                 self._path(person_id, "conversation_profile.json"), profile
             )
+        self._report_cache[cache_key] = copy.deepcopy(artifact)
         return artifact
 
     def _create_version(
@@ -4287,23 +4314,46 @@ class ConversationWorkbench:
         _write_json(self._path(person_id, "conversation_messages.json"), messages)
         return copy.deepcopy(message)
 
+    def _baseline_files_tag(self) -> tuple:
+        tags: list[tuple] = []
+        for path in sorted(self.people_dir.glob("*/response_models/*.json")):
+            tags.append(("rm", path.name, self._file_tag(path)[0], self._file_tag(path)[1]))
+        for path in sorted(self.people_dir.glob("*/conversation_state.json")):
+            tags.append(("st", path.parent.name, self._file_tag(path)[0], self._file_tag(path)[1]))
+        for path in sorted(self.people_dir.glob("*/conversation_sources.json")):
+            tags.append(("src", path.parent.name, self._file_tag(path)[0], self._file_tag(path)[1]))
+        return tuple(tags)
+
     def _baseline_report(
         self, person_id: str, active_version: int | None
     ) -> dict[str, object]:
+        cache_key = (
+            "baseline_report",
+            str(person_id),
+            int(active_version) if active_version is not None else None,
+            self._baseline_files_tag(),
+        )
+        cached = self._report_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
         if active_version is None:
-            return {
+            result: dict[str, object] = {
                 "status": "not_assessed",
                 "reason": "active_response_model_required",
                 "sample_count": 0,
             }
+            self._report_cache[cache_key] = copy.deepcopy(result)
+            return result
         try:
             baseline_artifact = self._response_model(person_id, int(active_version))
         except ConversationError:
-            return {
+            result = {
                 "status": "not_assessed",
                 "reason": "v2_baseline_unavailable_v5_runtime_unaffected",
                 "sample_count": 0,
             }
+            self._report_cache[cache_key] = copy.deepcopy(result)
+            return result
         holdout_events = [
             dict(event)
             for source in self._list(person_id, "conversation_sources.json")
@@ -4329,11 +4379,13 @@ class ConversationWorkbench:
                     )
                 except ConversationError:
                     continue
-        return self._predictor.compare_baselines(
+        result = self._predictor.compare_baselines(
             baseline_artifact,
             holdout_events,
             wrong_person_artifacts=wrong_artifacts,
         )
+        self._report_cache[cache_key] = copy.deepcopy(result)
+        return result
 
     def _simulation_validation_report(
         self, person_id: str, active_version: int | None
