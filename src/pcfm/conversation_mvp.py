@@ -2565,7 +2565,6 @@ class ConversationWorkbench:
             "allowed_interests": sorted(INTERESTS),
             "allowed_stances": sorted(STANCES),
             "allowed_event_structure_types": sorted(EVENT_STRUCTURE_TYPES),
-            "style_hints": self._style_hints(person_id),
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
@@ -2584,12 +2583,6 @@ class ConversationWorkbench:
             "protected interest, keeping the person's sharpness — do NOT soften it "
             "into a bland 'I'm concerned'. Return JSON with exactly question_type, "
             "stance, tendency_ids, and answer. "
-            "style_hints lists the person's characteristic opening/connector phrases "
-            "in their source language. Express them in the answer's language — if "
-            "answering in Chinese, translate English connectives to natural Chinese "
-            "(Well→嗯/这个嘛, So→所以, Actually→其实, Look→你看, But→不过, "
-            "The point is→关键是, In other words→换句话说, First→首先); never paste "
-            "an English connective into a Chinese answer. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
             "For identity questions (question_type=identity), answer ONLY from "
@@ -2600,10 +2593,8 @@ class ConversationWorkbench:
             "relied on. "
             "answer is the person's first-person reply, under 1200 characters. "
             "response_language tells you which language to write in. If "
-            "response_language is Chinese, the WHOLE answer (including the opening "
-            "phrase) MUST be Chinese — translate any English style hint into "
-            "natural Chinese; never paste an English phrase into a Chinese answer. "
-            "Never add biography, memories, "
+            "response_language is Chinese, the WHOLE answer MUST be Chinese — never "
+            "paste an English phrase into a Chinese answer. Never add biography, memories, "
             "personal experiences, attributed facts, numbers, dates, or quotations "
             "not present in the supplied atoms. When no tendency atom applies, set "
             "stance to insufficient_evidence and still write a natural first-person "
