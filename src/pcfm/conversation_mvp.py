@@ -2754,36 +2754,7 @@ class ConversationWorkbench:
         identity_note = str(
             dict(artifact.get("scope", {})).get("identity_note", "")
         ).strip()
-        # 倾向原子候选：事件原子 + 单事件偏好原子 + 公开取向
-        ranked_events = sorted(
-            artifact.get("event_frames", []),
-            key=lambda frame: (
-                -_similarity(
-                    text,
-                    " ".join(
-                        (
-                            str(dict(frame["decision_frame"]).get("trigger", "")),
-                            str(dict(frame["observed_response"]).get("verbatim", "")),
-                        )
-                    ),
-                ),
-                str(frame["event_frame_id"]),
-            ),
-        )[:10]
-        event_candidates = [
-            {
-                "event_frame_id": str(frame["event_frame_id"]),
-                "trigger": str(dict(frame["decision_frame"]).get("trigger", "")),
-                "response_verbatim": str(
-                    dict(frame["observed_response"]).get("verbatim", "")
-                )[:400],
-                "domain_tags": list(frame.get("domain_tags", [])),
-                "event_structure_type": str(
-                    dict(frame["decision_frame"]).get("event_structure_type", "")
-                ),
-            }
-            for frame in ranked_events
-        ]
+        # 价值倾向原子（完整细分维度 + 领域标签），供 LLM 语义匹配；不再字面匹配事件原文
         preference_atoms = [
             {
                 "preference_atom_id": str(item.get("preference_atom_id", "")),
@@ -2793,21 +2764,25 @@ class ConversationWorkbench:
                 "protected_interest_id": str(item.get("protected_interest_id", "")),
                 "accepted_cost_id": str(item.get("accepted_cost_id", "")),
                 "event_structure_type": str(item.get("event_structure_type", "")),
+                "domain_tags": list(item.get("domain_tags", [])),
             }
             for item in dict(artifact.get("reviewed_public_model", {})).get(
                 "preference_atoms", []
             )
-        ][:30]
+        ]
+        # 领域画像（价值取向索引）：按领域聚合的整体倾向，供 LLM 定位领域与概览
         value_orientations = [
             {
                 "orientation_id": str(item.get("orientation_id", "")),
                 "interest_id": str(item.get("interest_id", "")),
-                "directions": list(item.get("directions", [])),
-                "tendency_types": list(item.get("tendency_types", [])),
                 "primary_domains": list(item.get("primary_domains", [])),
+                "support": float(item.get("support", 0.0)),
+                "independent_source_count": int(
+                    item.get("independent_source_count", 0)
+                ),
             }
-            for item in artifact.get("orientation_index", [])
-        ][:20]
+            for item in artifact.get("value_orientation_index", [])
+        ]
         payload = {
             "person_identity": identity_note,
             "question": text,
@@ -2817,7 +2792,6 @@ class ConversationWorkbench:
                 if item.get("role") in {"user", "assistant"}
             ],
             "conversation_state": copy.deepcopy(dict(conversation_context or {})),
-            "event_candidates": event_candidates,
             "preference_atoms": preference_atoms,
             "value_orientations": value_orientations,
             "allowed_tendency_types": sorted(TENDENCY_TYPES),
@@ -2828,21 +2802,24 @@ class ConversationWorkbench:
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
-            "Derive the stance from the supplied tendency atoms (preference_atoms and "
-            "value_orientations), NOT from general world knowledge. "
+            "Match the question to the supplied tendency atoms first: preference_atoms "
+            "carry domain_tags (the domain), tendency_type, direction/target or "
+            "protected/accepted interest, and event_structure_type; value_orientations "
+            "are a per-domain summary of the person's tendencies. Derive the stance "
+            "from these matched atoms, NOT from general world knowledge. "
             "Return JSON with exactly question_type, stance, tendency_ids, and answer. "
-            "Use the person’s characteristic opening/connector phrases in style_hints, "
-            "expressed in the answer’s language. "
+            "Use the person's characteristic opening/connector phrases in style_hints, "
+            "expressed in the answer's language. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
             "stance is one of the allowed_stances. tendency_ids lists only the supplied "
             "preference_atom/orientation IDs you actually relied on. "
-            "answer is the person's first-person reply in the current question's "
-            "language, under 1200 characters. Never add biography, memories, personal "
+            "answer is the person's first-person reply, in the SAME language as the "
+            "question, under 1200 characters. Never add biography, memories, personal "
             "experiences, attributed facts, numbers, dates, or quotations not present "
             "in the supplied atoms. When no tendency atom applies, set stance to "
-            "insufficient_evidence and write a natural first-person reply without any "
-            "meta-commentary about evidence or data availability."
+            "insufficient_evidence and still write a natural first-person reply without "
+            "any meta-commentary about evidence or data availability."
         )
         messages = [
             {"role": "system", "content": system},
@@ -2904,6 +2881,9 @@ class ConversationWorkbench:
         stance = str(unified.get("stance", "")).strip()
         if stance not in STANCES:
             return False, "stance_not_in_closed_vocabulary"
+        question_type = str(unified.get("question_type", "")).strip()
+        if not question_type:
+            return False, "question_type_empty"
         valid_ids: set[str] = {
             str(item.get("preference_atom_id", ""))
             for item in dict(artifact.get("reviewed_public_model", {})).get(
@@ -2934,10 +2914,71 @@ class ConversationWorkbench:
         )
         if forbidden_experience.search(answer):
             return False, "forbidden_experience"
-        # 回答应是第一人称（含"我"或英文"I"），避免退化为第三人称简报
-        if not re.search(r"[\u4e00-\u9fff]*[我]|\bI\b|\bI'|\bmy\b", answer):
-            return False, "not_first_person"
+        # 第一人称交给风格层处理，不据此拒绝（它曾导致同一问题时而答时而拒）
         return True, ""
+
+    def _unified_evidence(
+        self,
+        person_id: str,
+        artifact: Mapping[str, object],
+        tendency_ids: Sequence[str],
+    ) -> tuple[list[dict[str, object]], list[str], float]:
+        """把 LLM 匹配到的倾向原子查回真实材料，构建 evidence、事件 id、支持分。"""
+        atoms = {
+            str(item.get("preference_atom_id", "")): item
+            for item in dict(artifact.get("reviewed_public_model", {})).get(
+                "preference_atoms", []
+            )
+        }
+        frames = {
+            str(item.get("event_frame_id", "")): item
+            for item in artifact.get("event_frames", [])
+        }
+        sources_by_id = {
+            str(source.get("source_id", "")): source
+            for source in self._reviewed_sources_for_simulation_v4(
+                person_id, self._version_source_ids(person_id)
+            )
+        }
+        evidence: list[dict[str, object]] = []
+        event_ids: list[str] = []
+        matched_sources: set[str] = set()
+        seen_events: set[str] = set()
+        for tid in tendency_ids:
+            atom = atoms.get(str(tid))
+            if not atom:
+                continue
+            event_id = str(atom.get("event_frame_id", ""))
+            if not event_id or event_id in seen_events:
+                continue
+            frame = frames.get(event_id)
+            if not frame:
+                continue
+            seen_events.add(event_id)
+            matched_sources.add(str(frame.get("source_id", "")))
+            event_ids.append(event_id)
+            evidence.append(
+                {
+                    "title": sources_by_id.get(
+                        str(frame.get("source_id", "")), {}
+                    ).get("title", ""),
+                    "url": dict(frame.get("evidence") or {}).get("source_url", ""),
+                    "date": dict(frame.get("temporal_context") or {}).get(
+                        "response_time", ""
+                    ),
+                    "speaker": dict(frame.get("social_context") or {}).get(
+                        "speaker", ""
+                    ),
+                    "locator": dict(frame.get("evidence") or {}).get("locator", ""),
+                    "matched_question": dict(frame.get("decision_frame") or {}).get(
+                        "trigger", ""
+                    ),
+                    "support_score": 1.0,
+                    "event_id": event_id,
+                }
+            )
+        support = float(len(matched_sources))
+        return evidence, event_ids, support
 
     def _compose_bounded_person_response(
         self,
@@ -3496,12 +3537,21 @@ class ConversationWorkbench:
                 if unified["status"] == "ok" and gate_ok:
                     answer_text = unified["answer"]
                     stance = unified["stance"]
+                    tendency_ids = [str(v) for v in unified.get("tendency_ids", [])]
+                    evidence, evidence_event_ids, support = self._unified_evidence(
+                        person_id, artifact, tendency_ids
+                    )
+                    person_prediction_status = (
+                        "unified_tendency_derivation"
+                        if tendency_ids
+                        else "not_available"
+                    )
                     base.update(
                         {
                             "status": "answered",
                             "answer_status": unified["question_type"] or predicted["answer_status"],
                             "applicability": "unified_person_response",
-                            "confidence": 0.0,
+                            "confidence": support,
                             "text": answer_text,
                             "neutral_content": answer_text,
                             "frozen_contract": None,
@@ -3517,16 +3567,16 @@ class ConversationWorkbench:
                                 "memories": [],
                                 "uncertainties": [],
                                 "answer_status": unified["question_type"] or predicted["answer_status"],
-                                "confidence": 0.0,
+                                "confidence": support,
                                 "applicability": "unified_person_response",
                                 "refusal_reasons": [],
                                 "evidence_refs": [],
-                                "evidence_event_ids": [],
+                                "evidence_event_ids": evidence_event_ids,
                                 "response_basis": {
                                     "path": "unified_person_response",
-                                    "person_prediction_status": "unified_tendency_derivation",
+                                    "person_prediction_status": person_prediction_status,
                                     "question_type": unified["question_type"],
-                                    "tendency_ids": unified["tendency_ids"],
+                                    "tendency_ids": tendency_ids,
                                 },
                             },
                             "prediction_trace": {
@@ -3539,10 +3589,10 @@ class ConversationWorkbench:
                             },
                             "style_status": "unified_person_generation",
                             "style_gate": {"status": "unified_person_generation", "changed": False},
-                            "evidence": [],
+                            "evidence": evidence,
                             "uncertainties": [],
                             "knowledge_source": "unified_model_derivation",
-                            "person_prediction_status": "unified_tendency_derivation",
+                            "person_prediction_status": person_prediction_status,
                         }
                     )
                 else:
