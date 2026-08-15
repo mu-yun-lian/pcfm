@@ -300,7 +300,7 @@ function renderWorkspace() {
   }
   $("#open-model-picker").textContent = currentModelLabel();
   $("#export-person").href = `/api/people/${encodeURIComponent(state.person.person_id)}/export`;
-  renderMessages(); renderSources(); renderVersions(); renderMetrics();
+  renderMessages(); renderSources(); renderVersions(); renderMetrics(); renderSessionBar();
   $("#paste-source-form [name=speaker]").value = state.person.name;
   $("#file-source-form [name=speaker]").value = state.person.name;
   $("#url-source-form [name=speaker]").value = state.person.name;
@@ -379,11 +379,10 @@ async function startNewConversation(button) {
   if (!state.person) return;
   busy(button, true, "处理中…");
   try {
-    const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/new`, {method:"POST",body:"{}"});
+    await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/new`, {method:"POST", body:"{}"});
     $("#new-conversation-dialog").close();
     await refreshConversation();
-    const count = data.conversation?.archived_message_count || 0;
-    toast(count ? `新对话已开始；原来的 ${count} 条消息已保存在本机归档。` : "当前已经是空对话。");
+    toast("新对话已开始。");
   } catch(error) { toast(error.message, true); }
   finally { busy(button, false); }
 }
@@ -740,6 +739,39 @@ async function archiveSelectedPerson() {
   });
 }
 
+function renderSessionBar() {
+  $("#session-title").textContent = state.conversation?.session_title || "新对话";
+  $("#session-count").textContent = (state.conversation?.messages?.length || 0) + " 条消息";
+}
+
+async function loadSessions() {
+  const data = await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions');
+  const sessions = data.sessions;
+  $("#sessions-list").innerHTML = sessions.length ? sessions.map(s => {
+    return '<article class="session-item ' + (s.active ? 'active' : '') + '" data-session-id="' + escapeHtml(s.session_id) + '">' +
+      '<button class="session-select" data-session-id="' + escapeHtml(s.session_id) + '"><strong>' + escapeHtml(s.title || '新对话') + '</strong>' +
+      '<small>' + s.message_count + ' 条消息 · ' + escapeHtml(shortTime(s.updated_at)) + '</small></button>' +
+      '<div class="session-actions"><button class="mini-button" data-rename-session="' + escapeHtml(s.session_id) + '">重命名</button>' +
+      '<button class="mini-button" data-delete-session="' + escapeHtml(s.session_id) + '">删除</button></div></article>';
+  }).join("") : '<p class="people-empty">暂无会话。</p>';
+  $$(".session-select").forEach(button => button.onclick = async () => {
+    await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.sessionId) + '/switch', {method:'POST', body:'{}'});
+    $("#sessions-dialog").close();
+    await refreshConversation();
+  });
+  $$("[data-rename-session]").forEach(button => button.onclick = async () => {
+    const title = prompt('新标题：', state.conversation?.session_title || '');
+    if (title === null) return;
+    await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.renameSession) + '/rename', {method:'POST', body:JSON.stringify({title})});
+    await loadSessions(); await refreshConversation();
+  });
+  $$("[data-delete-session]").forEach(button => button.onclick = async () => {
+    if (!confirm('删除这个会话？消息将无法恢复。')) return;
+    await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.deleteSession), {method:'DELETE', body:'{}'});
+    await loadSessions(); await refreshConversation();
+  });
+}
+
 function wire() {
   $("#person-search").oninput=renderPeople;
   ["#new-person","#new-person-small","#empty-create"].forEach(id=>$(id).onclick=()=>openPersonDialog(false));
@@ -748,6 +780,7 @@ function wire() {
   $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();
   $("#open-versions").onclick=()=>$("#versions-dialog").showModal(); $("#open-advanced").onclick=()=>{ $$(".person-menu").forEach(item=>item.hidden=true); $("#advanced-dialog").showModal(); };
   $("#new-conversation").onclick=()=>$("#new-conversation-dialog").showModal();
+  $("#open-sessions").onclick = async () => { await loadSessions(); $("#sessions-dialog").showModal(); };
   $("#open-archive").onclick=async()=>{await loadArchive();$("#archive-dialog").showModal();};
   $("#open-model-picker").onclick=async()=>{await loadModelServices();$("#model-services-dialog").showModal();};
   $("#clear-dialogue-model").onclick=clearDialogueModel;

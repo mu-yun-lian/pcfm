@@ -48,9 +48,14 @@
             <img id="chat-avatar" src="/default-person-avatar.png" alt="人物头像">
             <div><h2 id="chat-person-name"></h2><p><span id="chat-version">未建立版本</span><span class="dot">·</span><span id="chat-source-count">0 份资料</span></p></div>
           </div>
+          <div class="session-bar">
+            <span class="session-title" id="session-title">新对话</span>
+            <span class="session-count" id="session-count">0 条消息</span>
+          </div>
           <div class="header-actions">
             <span class="model-state" id="chat-model-state"></span>
             <button class="button quiet" id="new-conversation">新对话</button>
+            <button class="button quiet" id="open-sessions">历史会话</button>
             <button class="button secondary" id="open-sources">人物资料</button>
             <button class="button quiet" id="open-versions">版本</button>
             <button class="button quiet" id="open-advanced">高级</button>
@@ -78,6 +83,13 @@
         </footer>
       </section>
     </main>
+
+    <dialog id="sessions-dialog" class="wide-dialog">
+      <div class="dialog-card">
+        <div class="dialog-head"><div><p class="kicker">会话管理</p><h2>历史会话</h2></div><button type="button" class="close-button" data-close="sessions-dialog">关闭</button></div>
+        <div id="sessions-list" class="source-list"></div>
+      </div>
+    </dialog>
 
     <aside class="comparison-drawer" id="comparison-drawer" hidden>
       <div class="drawer-head"><div><p class="kicker">可核验材料</p><h2>现实回答对照</h2></div><button class="close-button" id="close-drawer" aria-label="关闭">关闭</button></div>
