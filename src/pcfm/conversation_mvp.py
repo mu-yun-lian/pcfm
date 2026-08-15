@@ -21,10 +21,8 @@ from urllib.request import Request, urlopen
 
 from .expression_renderer import (
     ExpressionRenderer,
-    ExpressionRendererError,
     SAFE_SURFACE_CONNECTORS,
     builtin_expression_profile_path,
-    render_person_surface_style,
 )
 from .response_prediction import (
     EVALUATION_TENDENCY_TYPES,
@@ -113,6 +111,42 @@ def _json_mapping(value: object) -> dict[str, object]:
     if not isinstance(parsed, Mapping):
         raise json.JSONDecodeError("expected a JSON object", clean, 0)
     return dict(parsed)
+
+
+def _derivation_view(index: object) -> dict[str, object]:
+    """把领域倾向画像里逐字原话(reason)剥掉，只留抽象倾向给 LLM 推导。
+
+    原话是证据（挂在 evidence 面板、由代码侧回填），不是推导正文的输入。
+    这样 LLM 只能看到 direction/target/protected_interest 等抽象字段，
+    既不会逐字照抄原话，也不会把原话里的专名(如 IBM)带进答案。
+    """
+    result: dict[str, object] = {}
+    for domain, cells in (index or {}).items():
+        if not isinstance(cells, Mapping):
+            continue
+        domain_view: dict[str, object] = {}
+        for structure, cell in cells.items():
+            if not isinstance(cell, Mapping):
+                continue
+            atoms = []
+            for atom in cell.get("atoms", []):
+                if not isinstance(atom, Mapping):
+                    continue
+                atoms.append(
+                    {
+                        key: value
+                        for key, value in atom.items()
+                        if key != "reason"
+                    }
+                )
+            domain_view[str(structure)] = {
+                "dominant_value": cell.get("dominant_value", ""),
+                "opposes": cell.get("opposes", []),
+                "supports": cell.get("supports", []),
+                "atoms": atoms,
+            }
+        result[str(domain)] = domain_view
+    return result
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -2253,328 +2287,6 @@ class ConversationWorkbench:
     def _protected_numbers(text: str) -> list[str]:
         return sorted(set(re.findall(r"\b\d+(?:[.,]\d+)*(?:-%|%)?|\b\d{4}-\d{2}-\d{2}\b", text)))
 
-    def _render_reply(
-        self, person_id: str, contract: Mapping[str, object]
-    ) -> tuple[str, str, dict[str, object]]:
-        profile = self.profile(person_id)
-        neutral = "\n".join(
-            str(item["text"])
-            for field in ("claims", "reasons", "memories", "uncertainties")
-            for item in contract[field]
-        )
-        configured_renderer = self._renderers.get(str(profile["style_profile_id"]))
-        if configured_renderer is not None and not isinstance(
-            configured_renderer, ExpressionRenderer
-        ):
-            try:
-                probe = configured_renderer.render(contract)
-                selected = dict(probe.get("selected", {}))
-            except Exception:
-                selected = {"status": "rejected"}
-            if selected.get("status") != "passed":
-                return neutral, "neutral_fallback", {
-                    "status": "failed_returned_neutral",
-                    "selected_intensity": "neutral",
-                }
-        state = self._state(person_id)
-        active_version = state.get("active_version")
-        active_record = next(
-            (
-                item
-                for item in self._list(person_id, "conversation_versions.json")
-                if active_version is not None
-                and int(item.get("version", -1)) == int(active_version)
-            ),
-            None,
-        )
-        style_path = (
-            self._person_dir(person_id) / str(active_record["style_artifact_path"])
-            if active_record and active_record.get("style_artifact_path")
-            else None
-        )
-        if style_path is not None and style_path.exists():
-            style_artifact = _read_json(style_path, {})
-            if isinstance(style_artifact, Mapping):
-                try:
-                    result = render_person_surface_style(contract, style_artifact)
-                except Exception as error:
-                    result = {
-                        "status": "rejected",
-                        "changed": False,
-                        "reasons": [f"semantic_gate_error:{type(error).__name__}"],
-                        "checks": {},
-                        "used_rules": [],
-                    }
-                common_gate = {
-                    "status": result.get("status"),
-                    "changed": bool(result.get("changed", False)),
-                    "selected_intensity": "observed_surface_only",
-                    "style_artifact_hash": style_artifact.get("artifact_hash"),
-                    "style_profile_status": result.get("profile_status"),
-                    "checks": result.get("checks", {}),
-                    "reasons": result.get("reasons", []),
-                    "used_rules": result.get("used_rules", []),
-                }
-                if result.get("status") == "passed" and result.get("changed"):
-                    return str(result["text"]), "person_style_applied", common_gate
-                if result.get("status") == "neutral":
-                    return neutral, "neutral_expression", common_gate
-                return neutral, "neutral_fallback", {
-                    **common_gate,
-                    "status": "failed_returned_neutral",
-                    "selected_intensity": "neutral",
-                }
-        renderer = self._renderers.get(str(profile["style_profile_id"]))
-        if renderer is None:
-            return neutral, "neutral_no_validated_profile", {
-                "status": "not_run_neutral_profile", "selected_intensity": "neutral"
-            }
-        try:
-            result = renderer.render(contract)
-        except (ExpressionRendererError, Exception):
-            return neutral, "neutral_fallback", {
-                "status": "failed_returned_neutral",
-                "selected_intensity": "neutral",
-            }
-        selected = dict(result.get("selected", {}))
-        if selected.get("status") != "passed":
-            return str(result.get("neutral_text", neutral)), "neutral_fallback", {
-                "status": "failed_returned_neutral",
-                "selected_intensity": "neutral",
-            }
-        return str(selected.get("text", neutral)), "styled_semantic_gate_passed", {
-            "status": str(result.get("semantic_preservation", {}).get("status", "passed")),
-            "selected_intensity": selected.get("intensity", "neutral"),
-        }
-
-    def _model_plan_candidates(
-        self,
-        *,
-        model_ref: str,
-        person_id: str,
-        text: str,
-        history: Sequence[Mapping[str, object]],
-        artifact: Mapping[str, object],
-    ) -> tuple[list[dict[str, object]], dict[str, object]]:
-        if not model_ref:
-            return [], {
-                "status": "not_configured",
-                "authority": "none",
-                "model_calls": 0,
-            }
-        if self._predictor.is_ordinary_dialogue(text):
-            return [], {
-                "status": "ordinary_dialogue_handled_before_model_planning",
-                "authority": "content_free_dialogue_manager",
-                "model_calls": 0,
-            }
-        if self._model_services is None:
-            raise ConversationError("模型服务管理器未启用；没有进行自动回退。")
-        try:
-            service, model_id = self._model_services.resolve_model_ref(model_ref)
-            recall = self._predictor.recall(
-                artifact, text=text, history=history, limit=6
-            )
-            evidence = self._predictor.candidate_payload(recall)
-            response = self._model_services.invoke(
-                str(service["service_id"]),
-                model_id,
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You propose evidence-bounded response plans. Use only the "
-                            "supplied unit_id values. Never add a claim, reason, fact, "
-                            "memory, entity, number, quote, or stance. Return JSON with "
-                            "plans: [{claim_ids, reason_ids, memory_ids, uncertainty_ids}]."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(
-                            {
-                                "person_id": person_id,
-                                "message": text,
-                                "recent_dialogue": [
-                                    {
-                                        "role": item.get("role"),
-                                        "text": item.get("text"),
-                                    }
-                                    for item in history[-6:]
-                                ],
-                                "allowed_evidence": evidence,
-                            },
-                            ensure_ascii=False,
-                        ),
-                    },
-                ],
-                structured=True,
-                temperature=0.0,
-            )
-        except ModelServiceError as error:
-            raise ConversationError(str(error)) from error
-        try:
-            parsed = json.loads(str(response["text"]))
-            raw_plans = parsed.get("plans", []) if isinstance(parsed, dict) else []
-            plans = [dict(value) for value in raw_plans if isinstance(value, Mapping)]
-        except json.JSONDecodeError as error:
-            raise ConversationError(
-                "所选对话模型没有返回有效结构化候选；没有进行自动回退。"
-            ) from error
-        return plans, {
-            "status": "candidate_proposed",
-            "authority": "advisory_evidence_unit_selection_only",
-            "model_calls": 1,
-            "model_ref": model_ref,
-            "snapshot_id": dict(response["snapshot"])["snapshot_id"],
-            "fallback_used": False,
-            "candidate_plan_count": len(plans),
-        }
-
-    def _render_with_selected_model(
-        self,
-        person_id: str,
-        contract: Mapping[str, object],
-        *,
-        model_ref: str,
-    ) -> tuple[str, str, dict[str, object], int, int]:
-        if not model_ref:
-            text, status, gate = self._render_reply(person_id, contract)
-            return text, status, gate, 0, 0
-        if self._model_services is None:
-            raise ConversationError("模型服务管理器未启用；没有进行自动回退。")
-        service, model_id = self._model_services.resolve_model_ref(model_ref)
-        neutral = "\n".join(
-            str(item["text"])
-            for field in ("claims", "reasons", "memories", "uncertainties")
-            for item in contract[field]
-        )
-        version = next(
-            (
-                item
-                for item in self._list(person_id, "conversation_versions.json")
-                if int(item["version"])
-                == int(self._state(person_id).get("active_version") or -1)
-            ),
-            {},
-        )
-        style_rules: list[dict[str, object]] = []
-        relative = str(version.get("style_artifact_path", ""))
-        if relative:
-            artifact = _read_json(self._person_dir(person_id) / relative, {})
-            if isinstance(artifact, dict):
-                style_rules = [
-                    {
-                        "operation": value.get("operation"),
-                        "prefix": value.get("prefix"),
-                    }
-                    for value in artifact.get("surface_rules", [])
-                    if isinstance(value, Mapping)
-                ]
-        try:
-            response = self._model_services.invoke(
-                str(service["service_id"]),
-                model_id,
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "Rewrite only the frozen segments. Every segment must appear "
-                            "exactly once and unchanged. You may insert only punctuation, "
-                            "line breaks, or one of the supplied surface prefixes. Do not "
-                            "add facts, claims, reasons, memories, entities, numbers, "
-                            "quotes, certainty, or evidence. Return plain text only."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(
-                            {
-                                "frozen_contract": contract,
-                                "allowed_surface_rules": style_rules,
-                            },
-                            ensure_ascii=False,
-                        ),
-                    },
-                ],
-                structured=False,
-                temperature=0.0,
-            )
-        except ModelServiceError as error:
-            raise ConversationError(str(error)) from error
-        candidate = str(response["text"]).strip()
-        verifier = ExpressionRenderer.generic_control()
-        gate = verifier.check_candidate(
-            contract,
-            candidate,
-            allowed_insertions=SAFE_SURFACE_CONNECTORS,
-        )
-        gate_record = {
-            "status": gate["status"],
-            "checks": gate["checks"],
-            "reasons": gate["reasons"],
-            "model_ref": model_ref,
-            "snapshot_id": dict(response["snapshot"])["snapshot_id"],
-            "fallback_used": False,
-        }
-        if gate["status"] != "passed":
-            gate_record["status"] = "llm_semantic_gate_failed_returned_neutral"
-            return neutral, "neutral_fallback", gate_record, 1, 0
-        if candidate == neutral:
-            gate_record["status"] = "passed_unchanged_neutral"
-            return neutral, "neutral_expression", gate_record, 1, 0
-        validation_calls = 0
-        validation_ref = str(
-            self._model_services.roles().get("validation", "")
-        )
-        if validation_ref:
-            try:
-                validation_service, validation_model = (
-                    self._model_services.resolve_model_ref(validation_ref)
-                )
-                validation = self._model_services.invoke(
-                    str(validation_service["service_id"]),
-                    validation_model,
-                    [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Audit whether candidate text preserves the frozen contract "
-                                "without adding or removing content. Return JSON: "
-                                "{pass: boolean, reasons: string[]}. The deterministic gate "
-                                "already has final authority."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                {"frozen_contract": contract, "candidate": candidate},
-                                ensure_ascii=False,
-                            ),
-                        },
-                    ],
-                    structured=True,
-                    temperature=0.0,
-                )
-                validation_calls = 1
-                validation_payload = json.loads(str(validation["text"]))
-                if not bool(validation_payload.get("pass", False)):
-                    gate_record["status"] = "validation_model_rejected_returned_neutral"
-                    gate_record["validation_model_reasons"] = [
-                        str(value)
-                        for value in validation_payload.get("reasons", [])
-                    ]
-                    return neutral, "neutral_fallback", gate_record, 1, 1
-                gate_record["validation_model_snapshot_id"] = dict(
-                    validation["snapshot"]
-                )["snapshot_id"]
-            except (ModelServiceError, json.JSONDecodeError) as error:
-                gate_record["status"] = "validation_model_failed_returned_neutral"
-                gate_record["validation_model_error"] = type(error).__name__
-                return neutral, "neutral_fallback", gate_record, 1, 1
-        gate_record["status"] = "passed_person_surface_applied"
-        return candidate, "person_style_applied", gate_record, 1, validation_calls
-
     def _model_semantic_query_plan(
         self,
         *,
@@ -2831,9 +2543,10 @@ class ConversationWorkbench:
                 )
                 if part
             )
-        # 领域倾向画像：领域 → 该领域的价值倾向（含原话），供 LLM 定位领域并匹配。
+        # 领域倾向画像：领域 → 该领域的价值倾向，供 LLM 定位领域并匹配。
         # 这是建模阶段预构建的整体倾向（分领域），回答时按领域"查"，不现算。
-        domain_tendency_index = artifact.get("domain_tendency_index", {})
+        # 只给抽象倾向（剥掉逐字原话 reason），原话走 evidence 回填，避免照抄/漏专名。
+        domain_tendency_index = _derivation_view(artifact.get("domain_tendency_index", {}))
         # 回答语言随问题语言：中文问题必须中文回答，不被英文材料带偏。
         is_chinese = bool(re.search(r"[\u4e00-\u9fff]", str(text)))
         response_language = "Chinese" if is_chinese else "English"
@@ -2859,19 +2572,18 @@ class ConversationWorkbench:
             "domain_tendency_index is this person's value-tendency profile: "
             "domain → event_structure_type (the subdivision) → { dominant_value, "
             "opposes (object categories), supports (object categories), atoms }. "
-            "Each atom is a concrete tendency with the person's own wording (reason). "
+            "Each atom is an abstract tendency: direction (support/oppose/mixed), "
+            "target category, protected interest, accepted cost, and tendency_type. "
             "To answer: (1) identify the question's domain AND its event-structure "
             "subdivision; (2) read that subdivision's value tendency (dominant_value, "
             "opposes, supports); (3) drop back to its atoms and match by the atom's "
             "target CATEGORY plus direction — a question about a company/organization "
             "(Apple, Microsoft, IBM) must use atoms whose target is 'organization', "
-            "never 'individual'; a question about a person uses 'individual'. Each "
-            "atom's reason field is the person's VERBATIM wording — it is EVIDENCE of "
-            "the tendency, not text to paste into the answer. Derive a NEW first-person "
-            "reply from the atom's direction, target category, and protected interest, "
-            "keeping the person's sharpness — do NOT reproduce the reason verbatim, "
-            "and do NOT soften it into a bland 'I'm concerned'. Return JSON with "
-            "exactly question_type, stance, tendency_ids, and answer. "
+            "never 'individual'; a question about a person uses 'individual'. Derive "
+            "a NEW first-person reply from the atom's direction, target category, and "
+            "protected interest, keeping the person's sharpness — do NOT soften it "
+            "into a bland 'I'm concerned'. Return JSON with exactly question_type, "
+            "stance, tendency_ids, and answer. "
             "style_hints lists the person's characteristic opening/connector phrases "
             "in their source language. Express them in the answer's language — if "
             "answering in Chinese, translate English connectives to natural Chinese "
@@ -2889,9 +2601,9 @@ class ConversationWorkbench:
             "answer is the person's first-person reply, under 1200 characters. "
             "response_language tells you which language to write in. If "
             "response_language is Chinese, the WHOLE answer (including the opening "
-            "phrase) MUST be Chinese — translate the atom's English wording and any "
-            "English style hint into natural Chinese; never let the English source "
-            "material leak into a Chinese answer. Never add biography, memories, "
+            "phrase) MUST be Chinese — translate any English style hint into "
+            "natural Chinese; never paste an English phrase into a Chinese answer. "
+            "Never add biography, memories, "
             "personal experiences, attributed facts, numbers, dates, or quotations "
             "not present in the supplied atoms. When no tendency atom applies, set "
             "stance to insufficient_evidence and still write a natural first-person "
@@ -3450,33 +3162,6 @@ class ConversationWorkbench:
             "used_person_claim_ids": list(claim_ids),
             "external_knowledge_status": "model_generated_unverified_not_person_evidence",
         }
-
-    def _style_generated_answer(
-        self,
-        person_id: str,
-        text: str,
-        structured: Mapping[str, object],
-    ) -> tuple[str, str, dict[str, object]]:
-        contract = {
-            "schema_version": "pcfm-frozen-content-contract-v4",
-            "speech_act": str(dict(structured.get("speech_act") or {}).get("label", "direct_answer")),
-            "stance": str(dict(structured.get("stance") or {}).get("label", "neutral")),
-            "answer_status": str(structured.get("answer_status", "tendency_answer")),
-            "refusal_status": "not_refused",
-            "ordinary_dialogue_text": "",
-            "claims": [{"id": f"generated-{_text_hash(text)[:16]}", "text": text}],
-            "reasons": [],
-            "memories": [],
-            "uncertainties": [],
-            "protected_entities": [],
-            "protected_numbers": self._protected_numbers(text),
-            "protected_dates": sorted(set(re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text))),
-            "protected_quotes": [],
-            "evidence_refs": [str(value) for value in structured.get("evidence_refs", [])],
-            "confidence": float(structured.get("confidence", 0.0)),
-            "style_mode": "interview_public",
-        }
-        return self._render_reply(person_id, contract)
 
     def send_message(
         self,
