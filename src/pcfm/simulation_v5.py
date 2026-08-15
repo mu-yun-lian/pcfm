@@ -323,7 +323,46 @@ def _domain_tendency_index(
             values = list(kinds.get(kind, {}).values())
             values.sort(key=lambda item: -int(item.get("count", 0)))
             result[domain][kind] = values
+        result[domain]["summary"] = _summarize_domain(result[domain])
     return result
+
+def _summarize_domain(kinds: Mapping[str, object]) -> dict[str, object]:
+    """从一个领域的 tradeoffs/evaluations 归纳出价值原则概括（A 层）。
+
+    这是"多个 B 层伴随原子组合推导 A 层"：从碎片里归纳出
+    「这个人在这里倾向什么（主导价值）、反对什么、支持什么」。
+    """
+    tradeoffs = list(kinds.get("tradeoffs", []))
+    evaluations = list(kinds.get("evaluations", []))
+    top = tradeoffs[0] if tradeoffs else None
+    value_counts: dict[str, int] = {}
+    for item in tradeoffs:
+        key = str(item.get("protected_interest_id", ""))
+        value_counts[key] = value_counts.get(key, 0) + int(item.get("count", 0))
+    dominant = max(value_counts, key=lambda k: value_counts[k]) if value_counts else ""
+    opposes: list[str] = []
+    supports: list[str] = []
+    for item in evaluations:
+        target = str(item.get("target", ""))
+        direction = str(item.get("direction", ""))
+        if direction == "oppose" and target and target not in opposes:
+            opposes.append(target)
+        elif direction == "support" and target and target not in supports:
+            supports.append(target)
+    return {
+        "core_principle": (
+            {
+                "protected": str(top["protected_interest_id"]),
+                "cost": str(top["accepted_cost_id"]),
+            }
+            if top
+            else None
+        ),
+        "dominant_value": dominant,
+        "opposes": opposes,
+        "supports": supports,
+    }
+
 
 
 
