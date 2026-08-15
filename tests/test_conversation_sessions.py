@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pcfm import conversation_mvp as cm
 from pcfm.product_service import ProductService
 
 
@@ -59,3 +60,40 @@ class SessionMigrationTests(unittest.TestCase):
         second = self.service.conversation._active_session_id(self.person_id)
         self.assertEqual(first, second)
         self.assertEqual(1, len(self.service.conversation.list_sessions(self.person_id)))
+
+    def test_legacy_messages_migrate_into_active_session_preserving_dialogue_state(self) -> None:
+        person_dir = self.storage / "people" / self.person_id
+        messages = [
+            {"message_id": "m1", "person_id": self.person_id, "role": "user",
+             "text": "你好，我们来聊聊设计", "created_at": "2026-08-15T00:00:00Z"},
+            {"message_id": "m2", "person_id": self.person_id, "role": "assistant",
+             "text": "好，我们从简洁开始", "created_at": "2026-08-15T00:00:01Z"},
+        ]
+        (person_dir / "conversation_messages.json").write_text(
+            json.dumps(messages, ensure_ascii=False), encoding="utf-8"
+        )
+        state = {
+            "schema_version": cm.SCHEMA_VERSION,
+            "active_version": None,
+            "rollback_history": [],
+            "dialogue_state": {
+                "status": "active",
+                "topic_threads": [],
+                "active_topic_id": "t1",
+                "active_topic_message_ids": ["m1"],
+            },
+        }
+        (person_dir / "conversation_state.json").write_text(
+            json.dumps(state, ensure_ascii=False), encoding="utf-8"
+        )
+        sid = self.service.conversation._active_session_id(self.person_id)
+        sessions = self.service.conversation.list_sessions(self.person_id)
+        self.assertEqual(1, len(sessions))
+        active = sessions[0]
+        self.assertEqual("你好，我们来聊聊设计", active["title"])
+        self.assertEqual(2, active["message_count"])
+        self.assertTrue(active["active"])
+        self.assertEqual(sid, active["session_id"])
+        # dialogue_state 从 conversation_state.json 保留，而不是被重置为空
+        full = self.service.conversation._read_session(self.person_id, sid)
+        self.assertEqual("t1", full["dialogue_state"]["active_topic_id"])
