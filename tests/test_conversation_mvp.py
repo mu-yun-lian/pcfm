@@ -584,6 +584,35 @@ startxref
         self.assertEqual(reply["text"], reply["neutral_content"])
         self.assertNotIn("mutated", reply["text"])
 
+    def test_generation_temperature_follows_character_and_override(self) -> None:
+        jobs = self.service.create_conversation_person(
+            name="Steve Jobs",
+            aliases=[],
+            language="en",
+            description="Apple co-founder",
+        )
+        jobs_id = str(jobs["person_id"])
+        # steve_jobs_v1 表达包 → 人物默认温度 0.65（非全局 0.7）
+        self.assertAlmostEqual(
+            0.65, self.service.conversation._generation_temperature(jobs_id), places=6
+        )
+        # 中性人物 → 全局默认 0.7
+        self.assertAlmostEqual(
+            0.7,
+            self.service.conversation._generation_temperature(str(self.alice["person_id"])),
+            places=6,
+        )
+        # 显式覆盖后按覆盖值生效
+        self.service.update_person(jobs_id, {"generation_params": {"temperature": 1.1}})
+        self.assertAlmostEqual(
+            1.1, self.service.conversation._generation_temperature(jobs_id), places=6
+        )
+        # 越界被夹回 [0, 2]
+        self.service.update_person(jobs_id, {"generation_params": {"temperature": 99}})
+        self.assertEqual(2.0, self.service.conversation._generation_temperature(jobs_id))
+        self.service.update_person(jobs_id, {"generation_params": {"temperature": -3}})
+        self.assertEqual(0.0, self.service.conversation._generation_temperature(jobs_id))
+
 
 if __name__ == "__main__":
     unittest.main()

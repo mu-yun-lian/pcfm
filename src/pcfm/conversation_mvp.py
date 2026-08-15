@@ -71,6 +71,13 @@ SOURCE_ROLES = {
 }
 MAX_SOURCE_BYTES = 25 * 1024 * 1024
 
+# 生成参数：默认与按人物（表达包）的采样温度。温度只影响最终回答的
+# 语言组织与措辞，不参与价值推导；建模/提取/守门路径保持确定性 0.0。
+DEFAULT_GENERATION_TEMPERATURE = 0.7
+CHARACTER_GENERATION_TEMPERATURE = {
+    "steve_jobs_v1": 0.65,
+}
+
 
 class ConversationError(ValueError):
     pass
@@ -712,6 +719,7 @@ class ConversationWorkbench:
         source_mode: str = "user_provided",
         identity_note: str = "",
         focus_domain: str = "",
+        generation_params: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
         person = self._person(person_id)
         name = str(person["name"])
@@ -722,6 +730,16 @@ class ConversationWorkbench:
             raise ConversationError("表达包不存在。")
         if source_mode not in {"user_provided", "system_search"}:
             raise ConversationError("资料来源方式必须是用户提供或系统自动搜索。")
+        # 生成参数随人物变化：默认按表达包取温度，显式 generation_params 可覆盖。
+        temperature = CHARACTER_GENERATION_TEMPERATURE.get(
+            selected_style, DEFAULT_GENERATION_TEMPERATURE
+        )
+        if generation_params:
+            try:
+                temperature = float(dict(generation_params).get("temperature", temperature))
+            except (TypeError, ValueError):
+                pass
+        temperature = min(max(temperature, 0.0), 2.0)
         profile = {
             "schema_version": SCHEMA_VERSION,
             "person_id": person_id,
@@ -733,6 +751,7 @@ class ConversationWorkbench:
             "response_accuracy_status": "not_assessed",
             "identity_note": str(identity_note).strip(),
             "focus_domain": str(focus_domain).strip(),
+            "generation_params": {"temperature": temperature},
             "collection": {
                 "mode": source_mode,
                 "status": "search_ready" if source_mode == "system_search" else "awaiting_user_materials",
@@ -769,6 +788,24 @@ class ConversationWorkbench:
                 style_profile_id="neutral_v1",
             )
         return dict(raw)
+
+    def _generation_temperature(self, person_id: str) -> float:
+        """读取当前人物画像里的生成温度（随人物变化），越界/非法回退默认值。
+
+        旧画像没有 generation_params 字段时，回退到该表达包的人物默认温度，
+        而不是全局默认，保证「温度随人物变化」对既有人物同样生效。
+        """
+        profile = self.profile(person_id)
+        style_id = str(profile.get("style_profile_id", ""))
+        fallback = CHARACTER_GENERATION_TEMPERATURE.get(
+            style_id, DEFAULT_GENERATION_TEMPERATURE
+        )
+        params = dict(profile.get("generation_params") or {})
+        try:
+            value = float(params.get("temperature", fallback))
+        except (TypeError, ValueError):
+            value = fallback
+        return min(max(value, 0.0), 2.0)
 
     def add_text_source(
         self,
@@ -2706,32 +2743,47 @@ class ConversationWorkbench:
         }
 
     def _style_hints(self, person_id: str) -> list[str]:
-        """Read the active style artifact's confirmed surface connectors."""
+        """Read the active style artifact's confirmed surface connectors plus the
+        sealed expression profile's surface rules for the selected style.
+
+        Both sources are style-only (openers/connectors/tone markers) — they never
+        carry value content, facts, or stance. The render layer uses them to shape
+        wording after the prediction layer has fixed the value judgment.
+        """
+        seen: list[str] = []
         state = self._state(person_id)
         ver = state.get("active_version")
-        if not ver:
-            return []
-        record = next(
-            (
-                v
-                for v in self._list(person_id, "conversation_versions.json")
-                if int(v.get("version", -1)) == int(ver)
-            ),
-            None,
-        )
-        if not record or not record.get("style_artifact_path"):
-            return []
-        style_path = self._person_dir(person_id) / str(record["style_artifact_path"])
-        if not style_path.exists():
-            return []
-        artifact = _read_json(style_path, {})
-        if not isinstance(artifact, Mapping):
-            return []
-        seen: list[str] = []
-        for rule in artifact.get("surface_rules", []):
-            prefix = str(rule.get("prefix", "")).strip() if isinstance(rule, Mapping) else ""
-            if prefix and prefix not in seen:
-                seen.append(prefix)
+        if ver:
+            record = next(
+                (
+                    v
+                    for v in self._list(person_id, "conversation_versions.json")
+                    if int(v.get("version", -1)) == int(ver)
+                ),
+                None,
+            )
+            if record and record.get("style_artifact_path"):
+                style_path = self._person_dir(person_id) / str(record["style_artifact_path"])
+                if style_path.exists():
+                    artifact = _read_json(style_path, {})
+                    if isinstance(artifact, Mapping):
+                        for rule in artifact.get("surface_rules", []):
+                            prefix = str(rule.get("prefix", "")).strip() if isinstance(rule, Mapping) else ""
+                            if prefix and prefix not in seen:
+                                seen.append(prefix)
+        # 密封表达包（如 steve_jobs_v1）里的表面规则更丰富；只取开场/连接词，不带价值内容。
+        profile = self.profile(person_id)
+        style_id = str(profile.get("style_profile_id", ""))
+        renderer = self._renderers.get(style_id)
+        if renderer is not None:
+            rules = getattr(renderer, "rules", {})
+            if isinstance(rules, Mapping):
+                for rule in rules.values():
+                    if not isinstance(rule, Mapping):
+                        continue
+                    prefix = str(rule.get("prefix", "")).strip()
+                    if prefix and prefix not in seen:
+                        seen.append(prefix)
         return seen
 
     def _unified_person_response(
@@ -2761,12 +2813,27 @@ class ConversationWorkbench:
         identity_note = str(
             dict(artifact.get("scope", {})).get("identity_note", "")
         ).strip()
+        # 身份兜底：identity_note 为空时用人物名称+描述，避免「你是谁」退化成「我就是我」。
+        if not identity_note:
+            person = self._person(person_id)
+            identity_note = "; ".join(
+                part
+                for part in (
+                    str(person.get("name", "")).strip(),
+                    str(person.get("description", "")).strip(),
+                )
+                if part
+            )
         # 领域倾向画像：领域 → 该领域的价值倾向（含原话），供 LLM 定位领域并匹配。
         # 这是建模阶段预构建的整体倾向（分领域），回答时按领域"查"，不现算。
         domain_tendency_index = artifact.get("domain_tendency_index", {})
+        # 回答语言随问题语言：中文问题必须中文回答，不被英文材料带偏。
+        is_chinese = bool(re.search(r"[\u4e00-\u9fff]", str(text)))
+        response_language = "Chinese" if is_chinese else "English"
         payload = {
             "person_identity": identity_note,
             "question": text,
+            "response_language": response_language,
             "conversation_messages": [
                 {"role": item.get("role"), "text": str(item.get("text", ""))[:600]}
                 for item in history[-12:]
@@ -2801,20 +2868,28 @@ class ConversationWorkbench:
             "an English connective into a Chinese answer. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
+            "For identity questions (question_type=identity), answer ONLY from "
+            "person_identity — that field is authoritative for who this person is; "
+            "do not invent a name, role, or biography beyond it. "
             "stance is one of the allowed_stances. tendency_ids lists only the "
             "atom_ids values from the domain_tendency_index entries you actually "
             "relied on. "
-            "answer is the person's first-person reply, in the SAME language as the "
-            "question, under 1200 characters. Never add biography, memories, personal "
-            "experiences, attributed facts, numbers, dates, or quotations not present "
-            "in the supplied atoms. When no tendency atom applies, set stance to "
-            "insufficient_evidence and still write a natural first-person reply without "
-            "any meta-commentary about evidence or data availability."
+            "answer is the person's first-person reply, under 1200 characters. "
+            "response_language tells you which language to write in. If "
+            "response_language is Chinese, the WHOLE answer (including the opening "
+            "phrase) MUST be Chinese — translate the atom's English wording and any "
+            "English style hint into natural Chinese; never let the English source "
+            "material leak into a Chinese answer. Never add biography, memories, "
+            "personal experiences, attributed facts, numbers, dates, or quotations "
+            "not present in the supplied atoms. When no tendency atom applies, set "
+            "stance to insufficient_evidence and still write a natural first-person "
+            "reply without any meta-commentary about evidence or data availability."
         )
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
+        temperature = self._generation_temperature(person_id)
         compatibility_retry = False
         try:
             response = self._model_services.invoke(
@@ -2822,7 +2897,7 @@ class ConversationWorkbench:
                 model_id,
                 messages,
                 structured=True,
-                temperature=0.0,
+                temperature=temperature,
             )
         except ModelServiceError as structured_error:
             try:
@@ -2831,7 +2906,7 @@ class ConversationWorkbench:
                     model_id,
                     messages,
                     structured=False,
-                    temperature=0.0,
+                    temperature=temperature,
                 )
                 compatibility_retry = True
             except ModelServiceError as retry_error:
@@ -3038,13 +3113,14 @@ class ConversationWorkbench:
                     },
                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
                 ]
+        temperature = self._generation_temperature(person_id)
         try:
             response = self._model_services.invoke(
                 str(service["service_id"]),
                 model_id,
                 messages,
                 structured=True,
-                temperature=0.0,
+                temperature=temperature,
             )
         except ModelServiceError as structured_error:
             try:
@@ -3053,7 +3129,7 @@ class ConversationWorkbench:
                     model_id,
                     messages,
                     structured=False,
-                    temperature=0.0,
+                    temperature=temperature,
                 )
                 compatibility_retry = True
             except ModelServiceError as retry_error:
@@ -3197,6 +3273,7 @@ class ConversationWorkbench:
                 "external briefing is model-generated and not person evidence"
             ),
         }
+        temperature = self._generation_temperature(person_id)
         try:
             response = self._model_services.invoke(
                 str(service["service_id"]),
@@ -3206,7 +3283,7 @@ class ConversationWorkbench:
                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
                 ],
                 structured=True,
-                temperature=0.0,
+                temperature=temperature,
             )
         except ModelServiceError as error:
             raise ConversationError(str(error)) from error
@@ -3512,6 +3589,8 @@ class ConversationWorkbench:
                 "preference_structure_answer",
                 "refused",
                 "clarification_needed",
+                # 身份问题也走统一 LLM 路径：按 person_identity 自然回答，而非固定模板。
+                "identity_introduction",
             }
             if selected_model_ref and predicted["answer_status"] in derivation_statuses:
                 unified = self._unified_person_response(
@@ -3539,7 +3618,8 @@ class ConversationWorkbench:
                     base.update(
                         {
                             "status": "answered",
-                            "answer_status": unified["question_type"] or predicted["answer_status"],
+                            "answer_status": predicted["answer_status"],
+                            "question_type": unified["question_type"],
                             "applicability": "unified_person_response",
                             "confidence": support,
                             "text": answer_text,
@@ -3556,7 +3636,7 @@ class ConversationWorkbench:
                                 "reasons": [],
                                 "memories": [],
                                 "uncertainties": [],
-                                "answer_status": unified["question_type"] or predicted["answer_status"],
+                                "answer_status": predicted["answer_status"],
                                 "confidence": support,
                                 "applicability": "unified_person_response",
                                 "refusal_reasons": [],

@@ -947,6 +947,7 @@ class ProductService:
                 for key in (
                     "aliases", "language", "time_start", "time_end",
                     "source_mode", "identity_note", "focus_domain",
+                    "generation_params",
                 )
             ):
                 profile = self._conversation_call(
@@ -979,6 +980,12 @@ class ProductService:
                     ),
                     focus_domain=str(
                         changes.get("focus_domain", profile.get("focus_domain", ""))
+                    ),
+                    generation_params=dict(
+                        changes.get(
+                            "generation_params",
+                            profile.get("generation_params", {}),
+                        )
                     ),
                 )
             return self.get_person(person_id)
