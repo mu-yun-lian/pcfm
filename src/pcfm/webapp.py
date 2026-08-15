@@ -114,6 +114,13 @@ def create_handler(service: ProductService):
                         }
                     )
                     return
+                if (
+                    len(parts) == 5
+                    and parts[:2] == ["api", "people"]
+                    and parts[3:5] == ["conversation", "sessions"]
+                ):
+                    self._send_json({"ok": True, "sessions": service.list_sessions(parts[2])})
+                    return
                 if len(parts) == 3 and parts[:2] == ["api", "people"]:
                     self._send_json({"ok": True, "person": service.get_person(parts[2])})
                     return
@@ -350,6 +357,22 @@ def create_handler(service: ProductService):
                         result = service.start_new_conversation(person_id)
                         self._send_json({"ok": True, "conversation": result})
                         return
+                    if (
+                        len(action) == 4
+                        and action[:2] == ["conversation", "sessions"]
+                        and action[3] == "switch"
+                    ):
+                        result = service.switch_session(person_id, action[2])
+                        self._send_json({"ok": True, "session": result})
+                        return
+                    if (
+                        len(action) == 4
+                        and action[:2] == ["conversation", "sessions"]
+                        and action[3] == "rename"
+                    ):
+                        result = service.rename_session(person_id, action[2], str(body.get("title", "")))
+                        self._send_json({"ok": True, "session": result})
+                        return
                     if action == ["conversation", "model"]:
                         result = service.select_dialogue_model(
                             person_id, str(body.get("model_ref", ""))
@@ -537,6 +560,14 @@ def create_handler(service: ProductService):
                 if len(parts) == 3 and parts[:2] == ["api", "people"]:
                     service.delete_person(parts[2])
                     self._send_json({"ok": True})
+                    return
+                if (
+                    len(parts) == 6
+                    and parts[:2] == ["api", "people"]
+                    and parts[3:5] == ["conversation", "sessions"]
+                ):
+                    result = service.delete_session(parts[2], parts[5])
+                    self._send_json({"ok": True, **result})
                     return
                 if len(parts) == 3 and parts[:2] == ["api", "model-services"]:
                     service.delete_model_service(parts[2])

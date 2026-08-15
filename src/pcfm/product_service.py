@@ -528,6 +528,31 @@ class ProductService:
                 self.conversation.start_new_conversation, person_id
             )
 
+    def list_sessions(self, person_id: str) -> list[dict[str, object]]:
+        with self._lock:
+            self._require_person(person_id)
+            return self._conversation_call(self.conversation.list_sessions, person_id)
+
+    def create_session(self, person_id: str) -> dict[str, object]:
+        with self._lock:
+            self._require_person(person_id)
+            return self._conversation_call(self.conversation.create_session, person_id)
+
+    def switch_session(self, person_id: str, session_id: str) -> dict[str, object]:
+        with self._lock:
+            self._require_person(person_id)
+            return self._conversation_call(self.conversation.switch_session, person_id, session_id)
+
+    def rename_session(self, person_id: str, session_id: str, title: str) -> dict[str, object]:
+        with self._lock:
+            self._require_person(person_id)
+            return self._conversation_call(self.conversation.rename_session, person_id, session_id, title)
+
+    def delete_session(self, person_id: str, session_id: str) -> dict[str, object]:
+        with self._lock:
+            self._require_person(person_id)
+            return self._conversation_call(self.conversation.delete_session, person_id, session_id)
+
     def add_conversation_text_source(
         self,
         person_id: str,

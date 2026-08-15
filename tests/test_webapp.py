@@ -63,30 +63,27 @@ class WebAppTests(unittest.TestCase):
         status, health = self.json_request("/api/health")
         self.assertEqual((status, health["ok"]), (200, True))
 
-    def test_new_conversation_archives_old_context_instead_of_deleting_it(self) -> None:
-        status, created = self.json_request(
-            "/api/conversation/people", "POST", {"name": "Archive Chat"}
-        )
+    def test_new_conversation_creates_switchable_session(self) -> None:
+        status, created = self.json_request("/api/conversation/people", "POST", {"name": "Archive Chat"})
         self.assertEqual(status, 201)
         person_id = created["person"]["person_id"]
-        status, _reply = self.json_request(
-            f"/api/people/{person_id}/conversation/messages",
-            "POST",
-            {"text": "你好"},
-        )
+        status, _reply = self.json_request(f"/api/people/{person_id}/conversation/messages", "POST", {"text": "你好"})
         self.assertEqual(status, 201)
-        status, started = self.json_request(
-            f"/api/people/{person_id}/conversation/new", "POST", {}
-        )
+        status, new_session = self.json_request(f"/api/people/{person_id}/conversation/new", "POST", {})
         self.assertEqual(status, 200)
-        self.assertEqual(2, started["conversation"]["archived_message_count"])
-        status, summary = self.json_request(
-            f"/api/people/{person_id}/conversation"
-        )
+        first_id = new_session["conversation"]["session_id"]
+        status, listed = self.json_request(f"/api/people/{person_id}/conversation/sessions")
         self.assertEqual(status, 200)
-        self.assertEqual([], summary["conversation"]["messages"])
-        archive_dir = Path(self.temporary.name) / "people" / person_id / "conversation_archives"
-        self.assertEqual(1, len(list(archive_dir.glob("*.json"))))
+        self.assertEqual(2, len(listed["sessions"]))
+        active = next(s for s in listed["sessions"] if s["active"])
+        self.assertEqual(first_id, active["session_id"])
+        old_id = next(s for s in listed["sessions"] if not s["active"])["session_id"]
+        status, switched = self.json_request(f"/api/people/{person_id}/conversation/sessions/{old_id}/switch", "POST", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(old_id, switched["session"]["session_id"])
+        status, summary = self.json_request(f"/api/people/{person_id}/conversation")
+        self.assertEqual(status, 200)
+        self.assertEqual(2, len(summary["conversation"]["messages"]))
 
     def test_model_service_api_and_person_selection_never_expose_secret(self) -> None:
         status, created = self.json_request(
