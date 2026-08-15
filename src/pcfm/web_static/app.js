@@ -47,7 +47,7 @@ function busy(button, on, label = "处理中…") {
 function personById(id) { return state.people.find(item => item.person_id === id); }
 function currentName() { return state.person?.name || personById(state.person?.person_id)?.name || "当前人物"; }
 function shortTime(value) { try { return new Date(value).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}); } catch { return ""; } }
-function statusLabel(value) { return ({exploratory:"探索性人物模拟",insufficient_evidence:"尚未建立人物模型",answered:"已回答",needs_model:"需要选择对话模型",refused:"已拒绝强行预测",clarification:"需要澄清",ordinary_dialogue:"普通对话",direct_answer:"历史直接依据",similar_event_evidence_answer:"相似历史事件依据",preference_structure_answer:"公开取舍结构推断",orientation_projection_answer:"结合上下文的公开取向预测",general_assisted:"通用知识回答（非人物预测）",clarification_needed:"需要澄清"})[value] || value; }
+function statusLabel(value) { return ({exploratory:"探索性人物模拟",insufficient_evidence:"尚未建立人物模型",answered:"已回答",needs_model:"需要选择对话模型",refused:"已拒绝强行预测",clarification:"需要澄清",ordinary_dialogue:"普通对话",direct_answer:"历史直接依据",similar_event_evidence_answer:"相似历史事件依据",preference_structure_answer:"公开取舍结构推断",orientation_projection_answer:"结合上下文的公开取向预测",general_assisted:"通用知识回答（非人物预测）",object_evaluation:"人物对象评价",self_evaluation:"人物自我评价",policy_stance:"人物政策立场",factual:"人物事实判断",identity:"身份介绍",direct_historical:"历史直接依据",clarification_needed:"需要澄清"})[value] || value; }
 
 function humanStatus(value) {
   return ({

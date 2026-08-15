@@ -2493,6 +2493,35 @@ class ConversationWorkbench:
             "structure_candidate_count": len(structure_candidates),
         }
 
+    def _style_hints(self, person_id: str) -> list[str]:
+        """Read the active style artifact's confirmed surface connectors."""
+        state = self._state(person_id)
+        ver = state.get("active_version")
+        if not ver:
+            return []
+        record = next(
+            (
+                v
+                for v in self._list(person_id, "conversation_versions.json")
+                if int(v.get("version", -1)) == int(ver)
+            ),
+            None,
+        )
+        if not record or not record.get("style_artifact_path"):
+            return []
+        style_path = self._person_dir(person_id) / str(record["style_artifact_path"])
+        if not style_path.exists():
+            return []
+        artifact = _read_json(style_path, {})
+        if not isinstance(artifact, Mapping):
+            return []
+        seen: list[str] = []
+        for rule in artifact.get("surface_rules", []):
+            prefix = str(rule.get("prefix", "")).strip() if isinstance(rule, Mapping) else ""
+            if prefix and prefix not in seen:
+                seen.append(prefix)
+        return seen
+
     def _unified_person_response(
         self,
         *,
@@ -2590,12 +2619,15 @@ class ConversationWorkbench:
             "allowed_interests": sorted(INTERESTS),
             "allowed_stances": sorted(STANCES),
             "allowed_event_structure_types": sorted(EVENT_STRUCTURE_TYPES),
+            "style_hints": self._style_hints(person_id),
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
             "Derive the stance from the supplied tendency atoms (preference_atoms and "
             "value_orientations), NOT from general world knowledge. "
             "Return JSON with exactly question_type, stance, tendency_ids, and answer. "
+            "Use the person’s characteristic opening/connector phrases in style_hints, "
+            "expressed in the answer’s language. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
             "stance is one of the allowed_stances. tendency_ids lists only the supplied "
@@ -3262,7 +3294,7 @@ class ConversationWorkbench:
                     base.update(
                         {
                             "status": "answered",
-                            "answer_status": predicted["answer_status"],
+                            "answer_status": unified["question_type"] or predicted["answer_status"],
                             "applicability": "unified_person_response",
                             "confidence": 0.0,
                             "text": answer_text,
@@ -3279,7 +3311,7 @@ class ConversationWorkbench:
                                 "reasons": [],
                                 "memories": [],
                                 "uncertainties": [],
-                                "answer_status": predicted["answer_status"],
+                                "answer_status": unified["question_type"] or predicted["answer_status"],
                                 "confidence": 0.0,
                                 "applicability": "unified_person_response",
                                 "refusal_reasons": [],
