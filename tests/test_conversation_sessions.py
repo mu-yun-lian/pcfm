@@ -16,9 +16,22 @@ class SessionMigrationTests(unittest.TestCase):
         self.service = ProductService(self.storage, seed_example=False)
         self.person = self.service.create_conversation_person(name="Alice Example")
         self.person_id = str(self.person["person_id"])
+        self._reset_sessions()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def _reset_sessions(self) -> None:
+        import shutil
+        person_dir = self.storage / "people" / self.person_id
+        sessions_dir = person_dir / "conversation_sessions"
+        if sessions_dir.exists():
+            shutil.rmtree(sessions_dir)
+        state_path = person_dir / "conversation_state.json"
+        state = cm._read_json(state_path, {})
+        state.pop("active_session_id", None)
+        state.pop("dialogue_state", None)
+        cm._write_json(state_path, state)
 
     def test_new_person_gets_one_empty_active_session(self) -> None:
         sessions = self.service.conversation.list_sessions(self.person_id)
@@ -107,9 +120,22 @@ class SessionCrudTests(unittest.TestCase):
         self.person = self.service.create_conversation_person(name="Alice Example")
         self.person_id = str(self.person["person_id"])
         self.cv = self.service.conversation
+        self._reset_sessions()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def _reset_sessions(self) -> None:
+        import shutil
+        person_dir = self.storage / "people" / self.person_id
+        sessions_dir = person_dir / "conversation_sessions"
+        if sessions_dir.exists():
+            shutil.rmtree(sessions_dir)
+        state_path = person_dir / "conversation_state.json"
+        state = cm._read_json(state_path, {})
+        state.pop("active_session_id", None)
+        state.pop("dialogue_state", None)
+        cm._write_json(state_path, state)
 
     def test_create_switch_rename_delete_roundtrip(self) -> None:
         a = self.cv.create_session(self.person_id)
