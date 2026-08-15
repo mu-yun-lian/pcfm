@@ -751,9 +751,14 @@ function renderSessionBar() {
 async function loadSessions() {
   if (!state.person) return;
   const data = await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions');
-  const sessions = data.sessions;
+  state.sessions = data.sessions;
   $("#sidebar-sessions").hidden = false;
-  $("#sidebar-sessions-title").textContent = state.person.name + ' 的会话';
+  renderSessionList();
+}
+
+function renderSessionList() {
+  const query = ($("#session-search")?.value || "").trim().toLowerCase();
+  const sessions = (state.sessions || []).filter(s => (s.title || '新对话').toLowerCase().includes(query));
   $("#sidebar-sessions-list").innerHTML = sessions.length ? sessions.map(s => {
     return '<div class="sidebar-session' + (s.active ? ' active' : '') + '" data-session-id="' + escapeHtml(s.session_id) + '">' +
       '<button class="ss-main" data-session-id="' + escapeHtml(s.session_id) + '">' +
@@ -765,7 +770,7 @@ async function loadSessions() {
         '<button class="ss-btn" data-delete-session="' + escapeHtml(s.session_id) + '" title="删除">✕</button>' +
       '</span>' +
     '</div>';
-  }).join("") : '<p class="people-empty">暂无会话</p>';
+  }).join("") : '<p class="people-empty">' + (query ? '无匹配会话' : '暂无会话') + '</p>';
   $$(".ss-main").forEach(button => button.onclick = async () => {
     await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.sessionId) + '/switch', {method:'POST', body:'{}'});
     await refreshConversation();
@@ -788,6 +793,7 @@ async function loadSessions() {
 
 function wire() {
   $("#person-search").oninput=renderPeople;
+  $("#session-search").oninput=renderSessionList;
   ["#new-person","#empty-create"].forEach(id=>$(id).onclick=()=>openPersonDialog(false));
   $("#message-form").onsubmit=sendMessage;
   $("#message-form textarea").onkeydown=event=>{ if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("#message-form").requestSubmit($("#message-form .send-button"));} };
