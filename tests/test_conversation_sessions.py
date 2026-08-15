@@ -178,3 +178,19 @@ class SessionCrudTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.cv.delete_session(self.person_id, "session-does-not-exist")
 
+    def test_summary_returns_session_fields(self) -> None:
+        sid = self.cv.create_session(self.person_id)["session_id"]
+        summary = self.service.conversation_summary(self.person_id)
+        self.assertEqual(sid, summary["session_id"])
+        self.assertEqual(sid, summary["active_session_id"])
+        self.assertEqual("新对话", summary["session_title"])
+
+    def test_send_message_persists_to_active_session_file(self) -> None:
+        reply = self.service.send_conversation_message(self.person_id, "你好")
+        self.assertIn("message_id", reply)
+        session = self.cv._read_session(self.person_id, self.cv._active_session_id(self.person_id))
+        self.assertGreaterEqual(session["message_count"], 2)  # user + assistant
+        self.assertEqual("你好", session["title"])
+        legacy = self.cv._list(self.person_id, "conversation_messages.json")
+        self.assertEqual([], legacy)  # 旧文件不再承载消息
+
