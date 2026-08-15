@@ -156,14 +156,16 @@ p{margin:0}
 .message-row.user{justify-content:flex-end}
 .user-bubble{max-width:76%;padding:11px 16px;border-radius:18px 18px 4px 18px;background:var(--green-soft);line-height:1.6;white-space:pre-wrap}
 .user-bubble small{display:block;margin-top:3px;opacity:.55;font-size:11px;text-align:right}
-.assistant-card{width:100%;padding:4px 0}
-.assistant-meta{display:flex;align-items:center;justify-content:space-between;gap:16px;color:var(--muted);font-size:12px}
-.assistant-card .answer{margin:6px 0 8px;font-size:15.5px;line-height:1.85;white-space:pre-wrap}
-.assistant-card.refused .answer{color:var(--red)}
-.message-actions{display:flex;align-items:center;gap:16px;padding-top:8px;color:#a5a59d}
-.message-actions button{padding:0;color:#8a8c88;font-size:12px}
+.assistant-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid #c8c1b4;flex:0 0 auto;margin-top:4px}
+.assistant-body{min-width:0;flex:1}
+.assistant-body .answer{margin:4px 0 8px;font-size:15.5px;line-height:1.85;white-space:pre-wrap}
+.message-row.assistant{gap:12px}
+.message-row.assistant.refused .answer{color:var(--red)}
+.message-actions{display:flex;align-items:center;gap:14px;opacity:0;transition:opacity .15s}
+.message-row.assistant:hover .message-actions{opacity:1}
+.message-actions button{padding:0;color:#8a8c88;font-size:12px;background:none;border:0;cursor:pointer}
 .message-actions button:hover{color:var(--green)}
-.message-actions button strong{color:var(--gold);font-weight:600}
+.evidence-meta{margin:0 0 4px;color:var(--green);font-weight:600}
 .evidence-details{margin-top:10px;padding:12px 14px;border-radius:10px;background:#f5f4ef;font-size:12px;line-height:1.6}
 .evidence-details a{color:var(--green)}
 .evidence-details p{margin:6px 0}

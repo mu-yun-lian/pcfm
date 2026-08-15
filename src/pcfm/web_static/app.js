@@ -85,7 +85,7 @@ function enabledModelOptions() {
 function currentModelLabel() {
   const ref = state.conversation?.dialogue_model_ref || "";
   const option = enabledModelOptions().find(item => item.ref === ref);
-  return option ? `${option.service.display_name} · ${option.modelId}${option.ready ? "" : "（需验证）"} ▾` : "未选择对话模型 ▾";
+  return option ? `${option.modelId}${option.ready ? "" : "（需验证）"} ▾` : "模型 ▾";
 }
 
 async function loadModelServices() {
@@ -325,26 +325,31 @@ function renderMessages() {
     return;
   }
   container.innerHTML = messages.map(message => {
-    if (message.role === "user") return `<article class="message-row user"><div class="user-bubble">${escapeHtml(message.text)}<small>${shortTime(message.created_at)}</small></div></article>`;
+    if (message.role === "user") return `<article class="message-row user"><div class="user-bubble">${escapeHtml(message.text)}</div></article>`;
     const comparisonReady = message.comparison?.status === "candidate_found";
-    const searchStatus = message.reality_lookup_status === "scheduled" ? "正在查找现实回答…" : message.reality_lookup_status === "not_found" ? "未找到可核验的现实回答" : "";
     const usage = message.model_usage || {};
     const modelUsageText = usage.total_calls > 0
-      ? `本次大模型调用 ${usage.total_calls} 次（歧义消解 ${usage.planning_calls || 0}、内容补充 ${usage.generation_calls || 0}、验证 ${usage.validation_calls || 0}）`
-      : usage.status === "selected_but_not_needed" ? "已选择模型，但本次确定性链路已完成，未调用" : "本次未调用大模型";
-    return `<article class="message-row assistant"><div class="assistant-card ${message.status === "refused" ? "refused" : ""}">
-      <div class="assistant-meta"><strong>${statusLabel(message.answer_status || message.status)}</strong><span>${message.person_prediction_status && message.person_prediction_status !== "not_available" ? `人物推断 · 证据支持 ${Number(message.confidence).toFixed(2)}（非准确率）` : "非人物预测"}</span></div>
-      <div class="answer">${escapeHtml(message.text)}</div>
-      ${message.uncertainties?.length ? `<div class="plain-notice">不确定项：${message.uncertainties.map(escapeHtml).join("；")}</div>` : ""}
-      <div class="message-actions">
-        <button data-action="evidence" data-id="${message.message_id}">查看依据</button>
-        <button data-action="reality" data-id="${message.message_id}">用现实回答优化</button>
-        <button data-action="feedback" data-id="${message.message_id}">${message.feedback ? "已反馈" : "反馈"}</button>
-        ${comparisonReady ? `<button data-action="open-comparison" data-id="${message.message_id}"><strong>发现可核验的现实回答</strong></button>` : ""}
-        ${searchStatus ? `<span class="lookup-status">${searchStatus}</span>` : ""}
+      ? `本次大模型调用 ${usage.total_calls} 次`
+      : usage.status === "selected_but_not_needed" ? "本次未调用大模型" : "本次未调用大模型";
+    return `<article class="message-row assistant ${message.status === "refused" ? "refused" : ""}">
+      <img class="assistant-avatar" src="${escapeHtml(state.person.avatar || "/default-person-avatar.png")}" alt="">
+      <div class="assistant-body">
+        <div class="answer">${escapeHtml(message.text)}</div>
+        ${message.uncertainties?.length ? `<div class="plain-notice">不确定项：${message.uncertainties.map(escapeHtml).join("；")}</div>` : ""}
+        <div class="message-actions">
+          <button data-action="evidence" data-id="${message.message_id}">依据</button>
+          <button data-action="reality" data-id="${message.message_id}">现实回答</button>
+          <button data-action="feedback" data-id="${message.message_id}">${message.feedback ? "已反馈" : "反馈"}</button>
+          ${comparisonReady ? `<button data-action="open-comparison" data-id="${message.message_id}">发现可核验回答</button>` : ""}
+        </div>
+        <div class="evidence-details" id="evidence-${message.message_id}" hidden>
+          <p class="evidence-meta">${statusLabel(message.answer_status || message.status)} · ${message.person_prediction_status && message.person_prediction_status !== "not_available" ? `证据支持 ${Number(message.confidence).toFixed(2)}（非准确率）` : "非人物预测"}</p>
+          ${evidenceHtml(message)}
+          <p>回应动作：${escapeHtml(message.structured_prediction?.speech_act?.label || "未输出")}；立场：${escapeHtml(message.structured_prediction?.stance?.label || "未输出")}；回答路径：${escapeHtml(statusLabel(message.answer_status || message.status))}；知识来源：${escapeHtml(message.knowledge_source || "none")}</p>
+          <p>内容模型：${escapeHtml(message.model_kind)}；对话模型：${escapeHtml(message.dialogue_model_provider && message.dialogue_model_id ? `${message.dialogue_model_provider} · ${message.dialogue_model_id}` : "未选择")}；${escapeHtml(modelUsageText)}；表达状态：${escapeHtml(humanStatus(message.style_status))}；准确性：${escapeHtml(humanStatus(message.response_accuracy_status))}</p>
+        </div>
       </div>
-      <div class="evidence-details" id="evidence-${message.message_id}" hidden>${evidenceHtml(message)}<p>回应动作：${escapeHtml(message.structured_prediction?.speech_act?.label || "未输出")}；立场：${escapeHtml(message.structured_prediction?.stance?.label || "未输出")}；回答路径：${escapeHtml(statusLabel(message.answer_status || message.status))}；人物预测状态：${escapeHtml(message.person_prediction_status || "not_available")}；知识来源：${escapeHtml(message.knowledge_source || "none")}</p><p>内容模型：${escapeHtml(message.model_kind)}；对话模型：${escapeHtml(message.dialogue_model_provider && message.dialogue_model_id ? `${message.dialogue_model_provider} · ${message.dialogue_model_id}` : "未选择")}；${escapeHtml(modelUsageText)}；表达状态：${escapeHtml(humanStatus(message.style_status))}；准确性：${escapeHtml(humanStatus(message.response_accuracy_status))}</p></div>
-    </div></article>`;
+    </article>`;
   }).join("");
   $$('[data-action="evidence"]').forEach(button => button.onclick = () => { const box = $(`#evidence-${CSS.escape(button.dataset.id)}`); box.hidden = !box.hidden; });
   $$('[data-action="reality"]').forEach(button => button.onclick = () => runRealityLookup(button.dataset.id, button));
@@ -562,11 +567,10 @@ function renderPeople() {
   $("#people-list").innerHTML = visible.map(person => `
     <article class="person-card ${state.person?.person_id === person.person_id ? "active" : ""}" draggable="true" data-person-card="${escapeHtml(person.person_id)}">
       <button class="person-select" data-person-id="${escapeHtml(person.person_id)}">
-        <img src="${escapeHtml(person.avatar || "/default-person-avatar.png")}" alt="${escapeHtml(person.name)}的头像" onerror="this.src='/default-person-avatar.png'">
-        <span><strong>${escapeHtml(person.name)}${person.is_demo ? ' <em class="demo-badge">演示人物</em>' : ''}</strong><small>v${escapeHtml(person.conversation_version || "—")} · ${person.source_count} 份资料 · ${person.message_count} 条消息</small><small class="recent">${escapeHtml(person.last_message || person.conversation_status_text)}</small></span>
+        <img src="${escapeHtml(person.avatar || "/default-person-avatar.png")}" alt="${escapeHtml(person.name)}" onerror="this.src='/default-person-avatar.png'">
+        <span><strong>${escapeHtml(person.name)}${person.is_demo ? ' <em class="demo-badge">演示</em>' : ''}</strong><small class="recent">${escapeHtml(person.last_message || "开始对话")}</small></span>
       </button>
-      <button class="person-more" aria-label="${escapeHtml(person.name)}的更多操作" title="编辑、导出或归档" data-person-more="${escapeHtml(person.person_id)}">更多</button>
-      <span class="person-drag-handle" title="拖到人物归档" data-person-drag="${escapeHtml(person.person_id)}">拖动</span>
+      <button class="person-more" aria-label="${escapeHtml(person.name)}的更多操作" data-person-more="${escapeHtml(person.person_id)}">⋯</button>
       <div class="person-menu" data-person-menu="${escapeHtml(person.person_id)}" hidden>
         <button data-edit-person="${escapeHtml(person.person_id)}">编辑人物</button>
         <a href="/api/people/${encodeURIComponent(person.person_id)}/export">导出备份</a>
