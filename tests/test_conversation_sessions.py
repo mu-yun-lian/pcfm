@@ -111,6 +111,29 @@ class SessionMigrationTests(unittest.TestCase):
         full = self.service.conversation._read_session(self.person_id, sid)
         self.assertEqual("t1", full["dialogue_state"]["active_topic_id"])
 
+    def test_start_new_conversation_migrates_legacy_first(self) -> None:
+        person_dir = self.storage / "people" / self.person_id
+        (person_dir / "conversation_messages.json").write_text(
+            json.dumps([{"message_id": "m1", "person_id": self.person_id, "role": "user",
+                        "text": "你好，我们来聊聊设计", "created_at": "2026-08-15T00:00:00Z"}], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        self.service.conversation.start_new_conversation(self.person_id)
+        sessions = self.service.conversation.list_sessions(self.person_id)
+        self.assertEqual(2, len(sessions))  # legacy + 新空会话
+        titles = {s["title"] for s in sessions}
+        self.assertIn("你好，我们来聊聊设计", titles)
+        self.assertIn("新对话", titles)
+
+    def test_delete_active_session_file_does_not_duplicate(self) -> None:
+        sid = self.service.conversation._active_session_id(self.person_id)
+        self.assertEqual(1, len(self.service.conversation.list_sessions(self.person_id)))
+        (self.storage / "people" / self.person_id / "conversation_sessions" / (sid + ".json")).unlink()
+        new_sid = self.service.conversation._active_session_id(self.person_id)
+        sessions = self.service.conversation.list_sessions(self.person_id)
+        self.assertEqual(1, len(sessions))  # 无重复
+        self.assertEqual(new_sid, sessions[0]["session_id"])
+
 
 class SessionCrudTests(unittest.TestCase):
     def setUp(self) -> None:

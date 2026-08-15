@@ -399,10 +399,38 @@ class ConversationWorkbench:
         active = state.get("active_session_id")
         if active and self._session_path(person_id, str(active)).exists():
             return str(active)
-        return self._migrate_sessions(person_id)
+        if not active:
+            migrated = self._migrate_sessions(person_id)
+            if migrated:
+                return str(migrated)
+        else:
+            surviving = self._list_sessions(person_id)
+            if surviving:
+                state["active_session_id"] = str(surviving[0]["session_id"])
+                _write_json(self._path(person_id, "conversation_state.json"), state)
+                return str(surviving[0]["session_id"])
+        now = _utc_now()
+        sid = self._new_session_id()
+        self._write_session(person_id, {
+            "schema_version": SCHEMA_VERSION,
+            "session_id": sid,
+            "person_id": person_id,
+            "title": "新对话",
+            "created_at": now,
+            "updated_at": now,
+            "message_count": 0,
+            "dialogue_state": {"status": "empty", "topic_threads": [], "active_topic_id": "", "active_topic_message_ids": []},
+            "messages": [],
+        })
+        state["active_session_id"] = sid
+        _write_json(self._path(person_id, "conversation_state.json"), state)
+        return sid
 
     def _migrate_sessions(self, person_id: str) -> str:
         state = self._state(person_id)
+        existing = state.get("active_session_id")
+        if existing:
+            return str(existing)
         now = _utc_now()
         self._sessions_dir(person_id).mkdir(parents=True, exist_ok=True)
         person_dialogue_state = dict(state.get("dialogue_state") or {})
@@ -443,20 +471,7 @@ class ConversationWorkbench:
         if not active_session_id and created_ids:
             active_session_id = created_ids[-1]
         if not active_session_id:
-            sid = self._new_session_id()
-            session = {
-                "schema_version": SCHEMA_VERSION,
-                "session_id": sid,
-                "person_id": person_id,
-                "title": "新对话",
-                "created_at": now,
-                "updated_at": now,
-                "message_count": 0,
-                "dialogue_state": {"status": "empty", "topic_threads": [], "active_topic_id": "", "active_topic_message_ids": []},
-                "messages": [],
-            }
-            self._write_session(person_id, session)
-            active_session_id = sid
+            return ""
 
         state["active_session_id"] = active_session_id
         state.pop("dialogue_state", None)
@@ -468,6 +483,7 @@ class ConversationWorkbench:
         return [self._session_meta(item, active) for item in self._list_sessions(person_id)]
 
     def create_session(self, person_id: str) -> dict[str, object]:
+        self._migrate_sessions(person_id)
         now = _utc_now()
         sid = self._new_session_id()
         session = {
