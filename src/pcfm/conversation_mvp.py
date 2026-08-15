@@ -1791,6 +1791,7 @@ class ConversationWorkbench:
         source_ids: Sequence[str],
     ) -> dict[str, object]:
         profile = self.profile(person_id)
+        person = self._person(person_id)
         try:
             artifact = self._simulation_predictor.fit(
                 person_id=person_id,
@@ -1803,6 +1804,9 @@ class ConversationWorkbench:
                     "language": profile.get("language", ""),
                     "time_scope": profile.get("time_scope", {}),
                     "identity_note": profile.get("identity_note", ""),
+                    # 供确定性身份兜底：identity_note 为空时用人物名称+描述回答「你是谁」
+                    "person_name": str(person.get("name", "")),
+                    "person_description": str(person.get("description", "")),
                 },
             )
         except SimulationV5Error as error:
@@ -1839,6 +1843,7 @@ class ConversationWorkbench:
                     "Simulation V5 artifact integrity validation failed."
                 ) from error
             profile = self.profile(person_id)
+            person = self._person(person_id)
             try:
                 recomputed = self._simulation_predictor.fit(
                     person_id=person_id,
@@ -1852,6 +1857,8 @@ class ConversationWorkbench:
                         "language": profile.get("language", ""),
                         "time_scope": profile.get("time_scope", {}),
                         "identity_note": profile.get("identity_note", ""),
+                        "person_name": str(person.get("name", "")),
+                        "person_description": str(person.get("description", "")),
                     },
                 )
             except SimulationV5Error as error:
@@ -2854,11 +2861,16 @@ class ConversationWorkbench:
             "opposes (object categories), supports (object categories), atoms }. "
             "Each atom is a concrete tendency with the person's own wording (reason). "
             "To answer: (1) identify the question's domain AND its event-structure "
-            "subdivision; (2) read that subdivision's value tendency; (3) drop back "
-            "to its atoms and use the matching concrete atoms (same target category "
-            "and direction) as your ground — if none match closely, fall back to the "
-            "subdivision's overall value tendency. Mimic the atoms' wording, tone and "
-            "sharpness — do NOT soften into a bland 'I'm concerned'. Return JSON with "
+            "subdivision; (2) read that subdivision's value tendency (dominant_value, "
+            "opposes, supports); (3) drop back to its atoms and match by the atom's "
+            "target CATEGORY plus direction — a question about a company/organization "
+            "(Apple, Microsoft, IBM) must use atoms whose target is 'organization', "
+            "never 'individual'; a question about a person uses 'individual'. Each "
+            "atom's reason field is the person's VERBATIM wording — it is EVIDENCE of "
+            "the tendency, not text to paste into the answer. Derive a NEW first-person "
+            "reply from the atom's direction, target category, and protected interest, "
+            "keeping the person's sharpness — do NOT reproduce the reason verbatim, "
+            "and do NOT soften it into a bland 'I'm concerned'. Return JSON with "
             "exactly question_type, stance, tendency_ids, and answer. "
             "style_hints lists the person's characteristic opening/connector phrases "
             "in their source language. Express them in the answer's language — if "
@@ -2915,10 +2927,40 @@ class ConversationWorkbench:
             candidate = _json_mapping(response["text"])
         except json.JSONDecodeError:
             candidate = None
+        model_calls = 2 if compatibility_retry else 1
+        # 逐字复刻原话时用更强指令重试一次：不缩成「保留判断」，也不放任照抄。
+        verbatim_retried = False
+        if isinstance(candidate, Mapping) and self._answer_copies_atom_reason(
+            str(candidate.get("answer", "")), artifact
+        ):
+            retry_system = system + (
+                " The answer you produced copies a source sentence verbatim. "
+                "Rewrite it as a NEW first-person sentence expressing the same "
+                "tendency — do not paste the atom's reason text."
+            )
+            retry_messages = [
+                {"role": "system", "content": retry_system},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ]
+            try:
+                retry_response = self._model_services.invoke(
+                    str(service["service_id"]),
+                    model_id,
+                    retry_messages,
+                    structured=True,
+                    temperature=temperature,
+                )
+                retry_candidate = _json_mapping(retry_response["text"])
+                if isinstance(retry_candidate, Mapping):
+                    candidate = retry_candidate
+                    model_calls += 1
+                    verbatim_retried = True
+            except (ModelServiceError, json.JSONDecodeError):
+                pass
         if not isinstance(candidate, Mapping):
             return {
                 "status": "unparseable",
-                "model_calls": 2 if compatibility_retry else 1,
+                "model_calls": model_calls,
                 "question_type": "",
                 "stance": "neutral",
                 "tendency_ids": [],
@@ -2930,11 +2972,12 @@ class ConversationWorkbench:
             "stance": str(candidate.get("stance", "")).strip(),
             "tendency_ids": [str(v) for v in candidate.get("tendency_ids", [])],
             "answer": str(candidate.get("answer", "")).strip(),
-            "model_calls": 2 if compatibility_retry else 1,
+            "model_calls": model_calls,
             "model_ref": model_ref,
             "snapshot_id": dict(response["snapshot"])["snapshot_id"],
             "fallback_used": False,
             "same_model_json_compatibility_retry": compatibility_retry,
+            "verbatim_reason_retry": verbatim_retried,
         }
 
     def _gate_unified_response(
@@ -2981,6 +3024,40 @@ class ConversationWorkbench:
             return False, "forbidden_experience"
         # 第一人称交给风格层处理，不据此拒绝（它曾导致同一问题时而答时而拒）
         return True, ""
+
+    @staticmethod
+    def _answer_copies_atom_reason(answer: str, artifact: Mapping[str, object]) -> bool:
+        """answer 是否近乎逐字复刻了某个倾向原子的原话（reason）。
+
+        只检测长连续片段（>=20 个规范字符），避免误伤正常改写中偶然共用的短词。
+        """
+        def _norm(value: str) -> str:
+            return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value).casefold())
+
+        reasons: list[str] = []
+        for domain_cells in dict(artifact.get("domain_tendency_index", {})).values():
+            if not isinstance(domain_cells, Mapping):
+                continue
+            for cell in domain_cells.values():
+                if not isinstance(cell, Mapping):
+                    continue
+                for atom in cell.get("atoms", []):
+                    if isinstance(atom, Mapping) and atom.get("reason"):
+                        reasons.append(str(atom["reason"]))
+        for item in dict(artifact.get("reviewed_public_model", {})).get(
+            "preference_atoms", []
+        ):
+            if not isinstance(item, Mapping):
+                continue
+            for reason in item.get("reasons", []) or []:
+                if reason:
+                    reasons.append(str(reason))
+        answer_norm = _norm(answer)
+        for reason in reasons:
+            reason_norm = _norm(reason)
+            if len(reason_norm) >= 20 and reason_norm in answer_norm:
+                return True
+        return False
 
     def _unified_evidence(
         self,
@@ -3589,8 +3666,6 @@ class ConversationWorkbench:
                 "preference_structure_answer",
                 "refused",
                 "clarification_needed",
-                # 身份问题也走统一 LLM 路径：按 person_identity 自然回答，而非固定模板。
-                "identity_introduction",
             }
             if selected_model_ref and predicted["answer_status"] in derivation_statuses:
                 unified = self._unified_person_response(

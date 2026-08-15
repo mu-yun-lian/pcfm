@@ -742,7 +742,18 @@ class SimulationKernelV5:
                 ordinary_text=ordinary[1],
             )
         if _is_identity_request(clean):
-            identity_note = str(dict(artifact.get("scope", {})).get("identity_note", "")).strip()
+            scope = dict(artifact.get("scope", {}) or {})
+            identity_note = str(scope.get("identity_note", "")).strip()
+            # 身份兜底：identity_note 为空时用人物名称+描述，避免「你是谁」退化成「我就是我」。
+            if not identity_note:
+                identity_note = "; ".join(
+                    part
+                    for part in (
+                        str(scope.get("person_name", "")).strip(),
+                        str(scope.get("person_description", "")).strip(),
+                    )
+                    if part
+                )
             if identity_note:
                 core_identity = identity_note.split(";")[0].strip()
                 is_chinese = bool(re.search(r"[\u4e00-\u9fff]", clean))
