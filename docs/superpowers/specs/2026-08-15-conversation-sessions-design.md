@@ -68,7 +68,9 @@
 
 约束：
 
+- summary() 返回新增 session_id、session_title、active_session_id 字段（供前端渲染会话条与状态）。
 - summary()、send_message()、list_people()、get_person() 全部改为读写活跃会话文件（由 active_session_id 定位），而非 conversation_messages.json。
+- list_people() 的 message_count / last_message 反映活跃会话（非全部会话），与会话切换后保持一致。
 - send_message 写消息后更新会话 updated_at 与 message_count，并写回 dialogue_state。
 - active_version / dialogue_model_ref 仍读 conversation_state.json，不随会话变。
 - 并发：沿用 ProductService._lock 串行化。
