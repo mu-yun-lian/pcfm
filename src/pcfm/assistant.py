@@ -1,91 +1,67 @@
 # -*- coding: utf-8 -*-
-"""AI 助手：操作员流程引擎（引导式，非被模拟人物）。
+"""AI 助手：LLM 工具调用代理（引导式操作员）。
 
-用户说意图 -> 助手列步骤 -> 逐步收集 -> 展示汇总 + 确认 -> 执行 ProductService 方法。
-边界：不可逆操作二次确认；搜索结果只进候选(reference_only)；助手不改人物内核。
+用户说自然语言 -> 助手用大模型理解意图 -> 需要时调用网页功能(工具) -> 逐步收集/执行。
+边界：不可逆操作先确认；搜索结果只进候选；助手只调用工具、不编造结果。
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+from .model_services import ModelServiceError
 
-class AssistantError(ValueError):
-    pass
+MAX_TOOL_ITER = 4
 
+_BASE_SYSTEM = (
+    "你是 PCFM 对话式人物模拟系统的操作助手。你帮用户操作系统，可以调用工具执行操作。\n"
+    "规则：\n"
+    "1. 引导式：用户说明意图后，你逐步收集必要信息；信息不足就先问，别乱猜。\n"
+    "2. 不可逆操作（永久删除）执行前必须向用户确认一次。\n"
+    "3. 联网搜索的结果只是候选材料，不是已核实真相，别声称是真相。\n"
+    "4. 你只能调用工具，不能编造执行结果；执行结果以工具返回为准。\n"
+    "5. 你的回复必须是 JSON 对象：\n"
+    '   - 只要说话：{"reply": "..."}\n'
+    '   - 要调用工具：{"reply": "先说一句正在做什么", "tool_calls": [{"tool": "工具名", "args": {...}}]}\n'
+    "下面是你可调用的工具（含参数说明）：\n"
+    "{tools}"
+)
 
-_INTENTS = [
-    ("permanent_delete", ("永久删除", "彻底删除")),
-    ("restore", ("恢复", "恢复归档")),
-    ("archive", ("归档", "移入归档")),
-    ("search", ("搜索", "上网搜", "联网搜", "搜一下", "搜人物")),
-    ("add_source", ("加材料", "添加材料", "添加资料", "加资料", "加文本", "加文件", "加网页")),
-    ("create_person", ("建人物", "新建人物", "创建人物", "建一个人物", "创建一个人")),
-    ("list_people", ("列出人物", "有哪些人物", "人物列表", "看看人物")),
-    ("list_archived", ("归档列表", "已归档")),
-    ("help", ("帮助", "能做什么", "怎么用", "命令")),
+_TOOLS = [
+    ("list_people", "列出所有已创建的人物（返回名称和ID）", {}),
+    ("list_archived_people", "列出所有已归档的人物（返回名称和ID）", {}),
+    (
+        "create_person",
+        "新建一个人物",
+        {
+            "name": "人物姓名(必填)",
+            "aliases": "别名列表(可空,数组)",
+            "language": "语言(默认 zh)",
+            "identity_note": "身份说明(一句话,可空)",
+            "focus_domain": "专注领域(可空)",
+        },
+    ),
+    (
+        "add_text_source",
+        "给某个人物添加文本原始材料",
+        {
+            "person_id": "人物ID(必填,先用 list_people 获取)",
+            "text": "文本材料内容(必填)",
+        },
+    ),
+    (
+        "search_person",
+        "联网搜索某个人物的公开资料(结果只进候选)",
+        {"person_id": "人物ID(必填)"},
+    ),
+    ("archive_person", "把某个人物移入归档(可恢复)", {"person_id": "人物ID(必填)"}),
+    ("restore_person", "恢复某个已归档的人物", {"person_id": "人物ID(必填)"}),
+    (
+        "permanent_delete_person",
+        "永久删除某个已归档人物(不可恢复,执行前须向用户确认)",
+        {"person_id": "人物ID(必填)"},
+    ),
 ]
-
-_FLOWS = {
-    "create_person": {
-        "label": "建人物",
-        "steps": [
-            ("name", "① 人物姓名是什么？", True),
-            ("aliases", "② 别名（逗号分隔，可空，直接回车跳过）", False),
-            ("language", "③ 语言（默认中文，直接回车用默认）", False),
-            ("identity_note", "④ 身份说明（一句话，推荐，可空）", False),
-            ("focus_domain", "⑤ 专注领域（可空）", False),
-        ],
-        "execute": "_do_create_person",
-    },
-    "add_source": {
-        "label": "添加材料",
-        "steps": [
-            ("person", "先选要给谁加材料：", True),
-            ("content", "把文本材料粘贴进来（一段或整篇）", True),
-        ],
-        "execute": "_do_add_source",
-    },
-    "search": {
-        "label": "联网搜索",
-        "steps": [
-            ("person", "搜谁的材料？选一个人物", True),
-        ],
-        "execute": "_do_search",
-    },
-    "archive": {
-        "label": "归档人物",
-        "steps": [
-            ("person", "要归档哪个人物？", True),
-        ],
-        "execute": "_do_archive",
-    },
-    "restore": {
-        "label": "恢复归档",
-        "steps": [
-            ("person", "要恢复哪个归档人物？", True),
-        ],
-        "execute": "_do_restore",
-    },
-    "permanent_delete": {
-        "label": "永久删除",
-        "steps": [
-            ("person", "要永久删除哪个归档人物？（⚠️不可恢复）", True),
-        ],
-        "execute": "_do_permanent_delete",
-    },
-}
-
-_CONFIRM = ("确认", "是", "好", "好的", "执行", "可以", "对", "yes", "ok", "y")
-_CANCEL = ("取消", "重来", "不要", "算了", "no", "n", "换一个")
-
-
-def _norm(text):
-    return str(text).strip().casefold()
-
-
-def _people_summary(people):
-    return "\n".join("%d. %s" % (i, p.get("name", "")) for i, p in enumerate(people, 1))
 
 
 class AssistantEngine:
@@ -107,239 +83,167 @@ class AssistantEngine:
         )
 
     def reset(self):
-        state = {"flow": None, "step": 0, "fields": {}, "pending_action": None}
+        state = {"history": [], "model_ref": ""}
         self._save_state(state)
         return state
 
-    def handle(self, text):
+    def set_model(self, model_ref):
         state = self._load_state() or self.reset()
-        clean = _norm(text)
-
-        # 任意步骤都可以「取消」中止流程
-        if clean in _CANCEL and (state.get("flow") or state.get("pending_action")):
-            self.reset()
-            return {
-                "reply": "已取消。\n\n我可以：建人物 / 加材料 / 搜索 / 归档 / 恢复 / 永久删除 / 列出人物。",
-                "state": self._load_state(),
-            }
-
-        if state.get("pending_action"):
-            if clean in _CONFIRM:
-                result = self._execute(state["pending_action"])
-                self.reset()
-                return {"reply": result, "state": self._load_state()}
-            if clean in _CANCEL:
-                self.reset()
-                return {
-                    "reply": "已取消。\n\n我可以：建人物 / 加材料 / 搜索 / 归档 / 恢复 / 永久删除 / 列出人物。",
-                    "state": self._load_state(),
-                }
-            return {
-                "reply": "请确认或取消（说「确认」执行 / 「取消」重来）",
-                "state": state,
-            }
-
-        if state.get("flow"):
-            return self._collect(state, clean)
-
-        for flow_id, keywords in _INTENTS:
-            if any(kw in clean for kw in keywords):
-                if flow_id == "help":
-                    return {"reply": self._help(), "state": state}
-                if flow_id == "list_people":
-                    people = self.service.list_people()
-                    reply = (
-                        "现有人物：\n" + _people_summary(people)
-                        if people
-                        else "还没有人物。说「建人物」开始。"
-                    )
-                    return {"reply": reply, "state": state}
-                if flow_id == "list_archived":
-                    people = self.service.list_archived_people()
-                    reply = (
-                        "已归档人物：\n" + _people_summary(people)
-                        if people
-                        else "归档里没有人物。"
-                    )
-                    return {"reply": reply, "state": state}
-                return self._start_flow(flow_id)
-
-        return {"reply": self._help(), "state": state}
-
-    def _help(self):
-        return (
-            "我能帮你操作这个系统，说个意图我就列步骤：\n"
-            "· 建人物 —— 逐步填姓名/别名/语言/身份说明\n"
-            "· 加材料 —— 给某个人物加文本资料\n"
-            "· 搜索 —— 联网搜人物公开资料（结果只进候选）\n"
-            "· 归档 / 恢复 / 永久删除\n"
-            "· 列出人物 / 归档列表\n"
-            "现在说你想做什么？"
-        )
-
-    def _start_flow(self, flow_id):
-        flow = _FLOWS[flow_id]
-        steps = flow["steps"]
-        state = {"flow": flow_id, "step": 0, "fields": {}, "pending_action": None}
+        state["model_ref"] = str(model_ref).strip()
         self._save_state(state)
-        lines = ["开始「%s」，共 %d 步：" % (flow["label"], len(steps))]
-        for _field, label, _req in steps:
-            lines.append("  " + label)
-        if steps[0][0] == "person":
-            people = self.service.list_people()
-            if people:
-                lines.append("")
-                lines.append("现有人物：")
-                lines.append(_people_summary(people))
-        lines.append("")
-        lines.append("先回答第一步：")
-        lines.append(steps[0][1])
-        return {"reply": "\n".join(lines), "state": state}
+        return state
 
-    def _collect(self, state, clean):
-        flow = _FLOWS[state["flow"]]
-        steps = flow["steps"]
-        step_index = int(state["step"])
-        field, label, required = steps[step_index]
+    def _model_ref(self, state):
+        configured = str(state.get("model_ref", "")).strip()
+        if configured:
+            return configured
+        roles = self.service.model_services.roles() if self.service.model_services else {}
+        return str(roles.get("default_dialogue", ""))
 
-        if field == "person":
-            person_id = self._pick_person_id(clean)
-            if person_id is None:
-                return {"reply": self._people_list_prompt(), "state": state}
-            state["fields"]["person_id"] = person_id
-        else:
-            value = str(clean)
-            if not value and not required:
-                value = ""
-            if not value and required:
-                return {"reply": "这一步必须填：\n" + label, "state": state}
-            state["fields"][field] = value
-
-        next_index = step_index + 1
-        if next_index < len(steps):
-            state["step"] = next_index
-            self._save_state(state)
-            return {"reply": "好。\n\n" + steps[next_index][1], "state": state}
-
-        summary = self._summary(state)
-        state["pending_action"] = {"flow": state["flow"], "summary": summary}
-        state["flow"] = None
-        self._save_state(state)
-        return {
-            "reply": "都齐了，请核对：\n" + summary + "\n\n确认执行吗？（说「确认」执行，或「取消」重来）",
-            "state": state,
-        }
-
-    def _pick_person_id(self, text):
-        people = self.service.list_people()
-        if not people:
-            return None
-        clean = _norm(text)
-        for index, person in enumerate(people, 1):
-            if clean == str(index):
-                return str(person["person_id"])
-        matched = [
-            p for p in people
-            if _norm(str(p.get("name", ""))) in clean or clean in _norm(str(p.get("name", "")))
-        ]
-        if len(matched) == 1:
-            return str(matched[0]["person_id"])
-        return None
-
-    def _people_list_prompt(self):
-        people = self.service.list_people()
-        if not people:
-            return "现在还没有人物。先走「建人物」流程。"
-        return "没匹配到，请用序号或全名。现有人物：\n" + _people_summary(people)
-
-    def _summary(self, state):
-        flow = _FLOWS[state["flow"]]
-        fields = state["fields"]
-        lines = ["流程：" + flow["label"]]
-        for field, label, _req in flow["steps"]:
-            if field == "person":
-                value = self._person_name(fields.get("person_id", ""))
-            else:
-                value = fields.get(field, "")
-            lines.append("  " + label.rstrip("：") + ": " + (value or "（空）"))
+    def _tools_text(self):
+        lines = []
+        for name, description, parameters in _TOOLS:
+            params = ", ".join(
+                "%s=%s" % (k, v) for k, v in parameters.items()
+            ) if parameters else "无参数"
+            lines.append("- %s: %s（参数：%s）" % (name, description, params))
         return "\n".join(lines)
 
-    def _person_name(self, person_id):
-        if not person_id:
-            return ""
-        try:
-            return str(self.service.get_person(person_id).get("name", person_id))
-        except Exception:
-            return str(person_id)
+    def _execute_tool(self, name, args):
+        active = self.service.list_people()
+        archived = self.service.list_archived_people()
+        # 名称→ID：活跃 + 归档都搜，restore/permanent_delete 需要归档里的人物
+        by_name = {
+            str(p["name"]).casefold(): str(p["person_id"])
+            for p in active + archived
+        }
 
-    def _execute(self, action):
-        method = getattr(self, _FLOWS[action["flow"]]["execute"])
-        return method()
+        if name == "list_people":
+            people = self.service.list_people()
+            return "还没有人物。" if not people else "\n".join(
+                "%d. %s (ID: %s)" % (i, p["name"], p["person_id"])
+                for i, p in enumerate(people, 1)
+            )
+        if name == "list_archived_people":
+            return "归档里没有人物。" if not archived else "\n".join(
+                "%d. %s (ID: %s)" % (i, p["name"], p["person_id"])
+                for i, p in enumerate(archived, 1)
+            )
+        if name == "create_person":
+            aliases = args.get("aliases") or []
+            if isinstance(aliases, str):
+                aliases = [a.strip() for a in aliases.replace("，", ",").split(",") if a.strip()]
+            person = self.service.create_conversation_person(
+                name=str(args["name"]),
+                aliases=[str(a) for a in aliases],
+                language=str(args.get("language") or "zh"),
+                description=str(args.get("identity_note") or ""),
+                source_mode="user_provided",
+                identity_note=str(args.get("identity_note") or ""),
+                focus_domain=str(args.get("focus_domain") or ""),
+            )
+            return "已创建人物「%s」，ID=%s" % (person["name"], person["person_id"])
+        if name == "add_text_source":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            self.service.add_conversation_text_source(
+                pid,
+                title="助手添加的文本材料",
+                text=str(args["text"]),
+                speaker="",
+                source_date="",
+                dataset_role="model_source",
+            )
+            return "已添加文本材料。现在只是候选，需在人物资料里审核确认。"
+        if name == "search_person":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            if self.service.public_search is None:
+                return "联网搜索服务未配置，系统不会伪装成已经搜索。"
+            result = self.service.collect_public_sources(pid)
+            collection = dict(result.get("collection", result))
+            if collection.get("status") in {"temporarily_unavailable", "search_service_not_configured"}:
+                return str(collection.get("message", "搜索失败"))
+            return "已搜索并保存为候选（未核实）。去该人物「人物资料」查看待审核候选。"
+        if name == "archive_person":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            self.service.delete_person(pid)
+            return "已归档。"
+        if name == "restore_person":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            person = self.service.restore_person(pid)
+            return "已恢复「%s」。" % person["name"]
+        if name == "permanent_delete_person":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            self.service.permanently_delete_archived_person(pid)
+            return "已永久删除。"
+        return "未知工具：" + name
 
-    def _do_create_person(self):
-        state = self._load_state()
-        fields = state.get("fields", {})
-        aliases = [
-            a.strip()
-            for a in str(fields.get("aliases", "")).replace("，", ",").split(",")
-            if a.strip()
-        ]
-        language = str(fields.get("language", "") or "zh").strip()
-        identity = str(fields.get("identity_note", ""))
-        person = self.service.create_conversation_person(
-            name=str(fields["name"]),
-            aliases=aliases,
-            language=language,
-            description=identity,
-            source_mode="user_provided",
-            identity_note=identity,
-            focus_domain=str(fields.get("focus_domain", "")),
+    def _resolve_person(self, ref, by_name):
+        ref = str(ref or "").strip()
+        if ref.casefold() in by_name:
+            return by_name[ref.casefold()]
+        for person in self.service.list_people():
+            if str(person["person_id"]) == ref:
+                return ref
+        raise ValueError("找不到这个人，请先用 list_people 查人物ID。")
+
+    def _call_model(self, model_ref, messages):
+        service, model_id = self.service.model_services.resolve_model_ref(model_ref)
+        return self.service.model_services.invoke(
+            str(service["service_id"]),
+            model_id,
+            messages,
+            structured=True,
+            temperature=0.2,
         )
-        return "已创建人物「%s」。下一步可以「加材料」贴原始资料，或「搜索」联网找资料。" % person["name"]
 
-    def _do_add_source(self):
-        state = self._load_state()
-        fields = state.get("fields", {})
-        person_id = str(fields["person_id"])
-        content = str(fields["content"])
-        self.service.add_conversation_text_source(
-            person_id,
-            title="助手添加的文本材料",
-            text=content,
-            speaker="",
-            source_date="",
-            dataset_role="model_source",
-        )
-        return "已添加文本材料（%d 字）。现在只是候选，可到该人物「人物资料」里审核确认。" % len(content)
+    def handle(self, text):
+        state = self._load_state() or self.reset()
+        model_ref = self._model_ref(state)
+        if not model_ref:
+            return {
+                "reply": "助手还没配置大模型。请先在「模型服务」里配置并设为默认对话模型。",
+                "state": state,
+            }
+        system = _BASE_SYSTEM.replace("{tools}", self._tools_text())
+        history = state.get("history", [])[-12:]
+        messages = [{"role": "system", "content": system}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": str(text)})
 
-    def _do_search(self):
-        state = self._load_state()
-        fields = state.get("fields", {})
-        person_id = str(fields["person_id"])
-        if self.service.public_search is None:
-            return "联网搜索服务未配置，系统不会伪装成已经搜索。"
-        result = self.service.collect_public_sources(person_id)
-        collection = dict(result.get("collection", result))
-        if collection.get("status") in {"temporarily_unavailable", "search_service_not_configured"}:
-            return str(collection.get("message", "搜索失败"))
-        return "已搜索并保存为候选（reference_only，未核实）。去该人物「人物资料」查看待审核候选。"
+        reply = "（助手没有返回内容）"
+        for _ in range(MAX_TOOL_ITER):
+            try:
+                response = self._call_model(model_ref, messages)
+                parsed = json.loads(response["text"])
+            except (ModelServiceError, json.JSONDecodeError) as error:
+                reply = "助手调用大模型失败：" + str(error)
+                break
+            if not isinstance(parsed, dict):
+                reply = "助手返回了无法读取的内容。"
+                break
+            reply = str(parsed.get("reply", "")).strip() or reply
+            tool_calls = parsed.get("tool_calls") or []
+            if not tool_calls:
+                break
+            messages.append({"role": "assistant", "content": json.dumps(parsed, ensure_ascii=False)})
+            results = []
+            for tc in tool_calls:
+                if not isinstance(tc, dict):
+                    results.append({"tool": "", "ok": False, "error": "无效工具调用"})
+                    continue
+                name = str(tc.get("tool", ""))
+                args = tc.get("args") or {}
+                try:
+                    result = self._execute_tool(name, args)
+                    results.append({"tool": name, "ok": True, "result": result})
+                except Exception as error:
+                    results.append({"tool": name, "ok": False, "error": str(error)})
+            messages.append(
+                {"role": "user", "content": "工具执行结果：" + json.dumps(results, ensure_ascii=False)}
+            )
 
-    def _do_archive(self):
-        state = self._load_state()
-        person_id = str(state["fields"]["person_id"])
-        name = self._person_name(person_id)
-        self.service.delete_person(person_id)
-        return "已归档「%s」（可恢复）。要找回时说「恢复」。" % name
-
-    def _do_restore(self):
-        state = self._load_state()
-        person_id = str(state["fields"]["person_id"])
-        person = self.service.restore_person(person_id)
-        return "已恢复「%s」。" % person["name"]
-
-    def _do_permanent_delete(self):
-        state = self._load_state()
-        person_id = str(state["fields"]["person_id"])
-        name = self._person_name(person_id)
-        self.service.permanently_delete_archived_person(person_id)
-        return "已永久删除「%s」。" % name
+        history.append({"role": "user", "content": str(text)})
+        history.append({"role": "assistant", "content": reply})
+        state["history"] = history[-24:]
+        self._save_state(state)
+        return {"reply": reply, "state": state}

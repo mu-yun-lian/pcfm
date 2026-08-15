@@ -176,6 +176,10 @@ def create_handler(service: ProductService):
                     service.assistant.reset()
                     self._send_json({"ok": True, "assistant": {"reply": "已重置。", "state": service.assistant._load_state()}})
                     return
+                if parts == ["api", "assistant", "model"]:
+                    state = service.assistant.set_model(str(body.get("model_ref", "")))
+                    self._send_json({"ok": True, "assistant": {"reply": "已设置助手模型。", "state": state}})
+                    return
                 if parts == ["api", "conversation", "people"]:
                     person = service.create_conversation_person(
                         name=str(body.get("name", "")),
