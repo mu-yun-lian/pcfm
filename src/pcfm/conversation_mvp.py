@@ -2695,16 +2695,20 @@ class ConversationWorkbench:
             "target category, protected interest, accepted cost, and tendency_type. "
             "When response_language is Chinese these fields are already translated "
             "to Chinese — read them in Chinese and answer in Chinese. "
-            "To answer: (1) identify the question's domain AND its event-structure "
-            "subdivision; (2) read that subdivision's value tendency (dominant_value, "
-            "opposes, supports); (3) drop back to its atoms and match by the atom's "
-            "target CATEGORY plus direction — a question about a company/organization "
-            "(Apple, Microsoft, IBM) must use atoms whose target is 'organization', "
-            "never 'individual'; a question about a person uses 'individual'. Derive "
-            "a NEW first-person reply from the atom's direction, target category, and "
-            "protected interest, keeping the person's sharpness — do NOT soften it "
-            "into a bland 'I'm concerned'. Return JSON with exactly question_type, "
-            "stance, tendency_ids, and answer. "
+            "To answer in three steps. STEP 1 — LOCKED stance: identify the "
+            "question's domain AND event-structure subdivision; read that "
+            "subdivision's tendency; match atoms by target CATEGORY plus direction "
+            "(a company/organization question uses target 'organization', never "
+            "'individual'; a person question uses 'individual'). This determines your "
+            "stance and value ranking — it is locked and you must not change it. "
+            "STEP 2 — DEPTH: expand the answer with depth and specificity using your "
+            "own general knowledge — concrete argumentation, examples, and context — "
+            "but stay WITHIN the locked stance: never contradict the matched atoms' "
+            "direction or value ranking. Do NOT invent this person's own biography, "
+            "memories, or specific life events (that is their specific history, not "
+            "general knowledge). STEP 3 — WORDING: write it first-person, sharp and "
+            "specific, not a bland 'I'm concerned'. Return JSON with exactly "
+            "question_type, stance, tendency_ids, and answer. "
             "question_type is one of identity, self_evaluation, object_evaluation, "
             "policy_stance, factual, ordinary_dialogue, or direct_historical. "
             "For identity questions (question_type=identity), answer ONLY from "
@@ -2718,11 +2722,10 @@ class ConversationWorkbench:
             "answer is the person's first-person reply, under 1200 characters. "
             "response_language tells you which language to write in. If "
             "response_language is Chinese, the WHOLE answer MUST be Chinese — never "
-            "paste an English phrase into a Chinese answer. Never add biography, memories, "
-            "personal experiences, attributed facts, numbers, dates, or quotations "
-            "not present in the supplied atoms. When no tendency atom applies, set "
-            "stance to insufficient_evidence and still write a natural first-person "
-            "reply without any meta-commentary about evidence or data availability."
+            "paste an English phrase into a Chinese answer. When no tendency atom "
+            "applies, set stance to insufficient_evidence and still write a natural, "
+            "deep first-person reply without any meta-commentary about evidence or "
+            "data availability."
         )
         messages = [
             {"role": "system", "content": system},
@@ -2837,6 +2840,28 @@ class ConversationWorkbench:
         tendency_ids = {str(value) for value in unified.get("tendency_ids", [])}
         if not tendency_ids <= valid_ids:
             return False, "tendency_id_not_in_artifact"
+        # 锁死立场：评价类原子的 direction 与输出 stance 不能矛盾。
+        # 这是「内核可证伪」的硬门：把原子方向反过来，答案立场必须跟着翻。
+        atoms_by_id = {
+            str(item.get("preference_atom_id", "")): item
+            for item in dict(artifact.get("reviewed_public_model", {})).get(
+                "preference_atoms", []
+            )
+        }
+        evaluation_directions: set[str] = set()
+        for tid in tendency_ids:
+            atom = atoms_by_id.get(tid)
+            if not atom:
+                continue
+            if str(atom.get("tendency_type", "")) not in EVALUATION_TENDENCY_TYPES:
+                continue
+            direction = str(atom.get("direction", "")).strip()
+            if direction:
+                evaluation_directions.add(direction)
+        if evaluation_directions == {"oppose"} and stance == "support":
+            return False, "stance_contradicts_oppose_atom"
+        if evaluation_directions == {"support"} and stance == "oppose":
+            return False, "stance_contradicts_support_atom"
         answer = str(unified.get("answer", "")).strip()
         if not answer:
             return False, "empty_answer"
@@ -3486,7 +3511,7 @@ class ConversationWorkbench:
                         person_id, artifact, tendency_ids
                     )
                     person_prediction_status = (
-                        "unified_tendency_derivation"
+                        "stance_atom_derived_depth_external"
                         if tendency_ids
                         else "not_available"
                     )
@@ -3536,7 +3561,8 @@ class ConversationWorkbench:
                             "style_gate": {"status": "unified_person_generation", "changed": False},
                             "evidence": evidence,
                             "uncertainties": [],
-                            "knowledge_source": "unified_model_derivation",
+                            "knowledge_source": "atom_stance_plus_external_depth",
+                            "external_depth": bool(tendency_ids),
                             "person_prediction_status": person_prediction_status,
                         }
                     )
@@ -3734,15 +3760,20 @@ class ConversationWorkbench:
                             "status": "unified_person_generation",
                             "changed": False,
                         }
-                        base["knowledge_source"] = "unified_model_derivation"
-                        base["person_prediction_status"] = "unified_tendency_derivation"
+                        base["knowledge_source"] = "atom_stance_plus_external_depth"
+                        base["external_depth"] = bool(unified.get("tendency_ids"))
+                        base["person_prediction_status"] = (
+                            "stance_atom_derived_depth_external"
+                            if unified.get("tendency_ids")
+                            else "not_available"
+                        )
                         structured["stance"] = {
                             "label": unified["stance"],
                             "probability": 0.0,
                         }
                         structured["response_basis"] = {
                             "path": "unified_person_response",
-                            "person_prediction_status": "unified_tendency_derivation",
+                            "person_prediction_status": base["person_prediction_status"],
                             "question_type": unified["question_type"],
                             "tendency_ids": unified["tendency_ids"],
                         }

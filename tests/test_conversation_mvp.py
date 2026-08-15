@@ -613,6 +613,51 @@ startxref
         self.service.update_person(jobs_id, {"generation_params": {"temperature": -3}})
         self.assertEqual(0.0, self.service.conversation._generation_temperature(jobs_id))
 
+    def test_stance_must_follow_matched_atom_direction(self) -> None:
+        """内核可证伪：把原子方向反过来，答案立场必须跟着翻，否则拒绝。"""
+        engine = self.service.conversation
+        artifact = {
+            "reviewed_public_model": {
+                "preference_atoms": [
+                    {
+                        "preference_atom_id": "atom-oppose",
+                        "tendency_type": "object_evaluation",
+                        "direction": "oppose",
+                    },
+                    {
+                        "preference_atom_id": "atom-support",
+                        "tendency_type": "object_evaluation",
+                        "direction": "support",
+                    },
+                ]
+            },
+            "orientation_index": [],
+            "value_orientation_index": [],
+        }
+        # 匹配到反对原子却说支持 → 拒绝（立场不能被 LLM 参数记忆架空）
+        ok, reason = engine._gate_unified_response(
+            {
+                "stance": "support",
+                "question_type": "object_evaluation",
+                "tendency_ids": ["atom-oppose"],
+                "answer": "我支持大公司官僚化。",
+            },
+            artifact,
+        )
+        self.assertFalse(ok)
+        self.assertEqual("stance_contradicts_oppose_atom", reason)
+        # 立场跟着原子翻 → 通过
+        ok, _reason = engine._gate_unified_response(
+            {
+                "stance": "oppose",
+                "question_type": "object_evaluation",
+                "tendency_ids": ["atom-oppose"],
+                "answer": "我反对大公司停止创新。",
+            },
+            artifact,
+        )
+        self.assertTrue(ok)
+
 
 if __name__ == "__main__":
     unittest.main()
