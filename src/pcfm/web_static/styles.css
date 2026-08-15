@@ -275,6 +275,26 @@ dialog.wide-dialog{width:min(1120px,calc(100vw - 36px))}
 .session-actions{display:flex;gap:6px;flex:none}
 .session-item.active{border-color:var(--green);background:var(--green-soft)}
 
+/* 侧栏常驻会话列表 */
+.sidebar-sessions{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.sidebar-sessions-head{display:flex;align-items:center;justify-content:space-between;padding:0 2px 6px;color:var(--muted);font-size:12px}
+.sidebar-sessions-head strong{font-weight:600}
+.ss-new{padding:0 6px;border:0;background:none;color:var(--green);font-size:17px;cursor:pointer;line-height:1}
+.ss-new:hover{color:#0f573f}
+#sidebar-sessions-list{display:grid;gap:1px;max-height:40vh;overflow:auto}
+.sidebar-session{display:flex;align-items:center;border-radius:8px}
+.sidebar-session.active{background:var(--green-soft)}
+.sidebar-session:hover{background:#f0ede4}
+.sidebar-session.active:hover{background:var(--green-soft)}
+.ss-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:7px 9px;border:0;background:none;text-align:left;cursor:pointer}
+.ss-title{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-session.active .ss-title{color:var(--green);font-weight:600}
+.ss-meta{font-size:11px;color:var(--muted)}
+.ss-actions{display:none;padding-right:6px;gap:2px}
+.sidebar-session:hover .ss-actions{display:flex}
+.ss-btn{padding:2px 5px;border:0;background:none;color:var(--muted);font-size:13px;cursor:pointer}
+.ss-btn:hover{color:var(--red)}
+
 /* 候选/对照 */
 .candidate-box{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:8px;background:var(--paper-2)}
 .candidate-box blockquote{margin:7px 0;font-size:13px;line-height:1.6}

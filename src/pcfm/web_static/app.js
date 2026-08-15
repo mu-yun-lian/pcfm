@@ -243,7 +243,7 @@ async function selectPerson(personId) {
   state.person = personData.person;
   state.conversation = conversationData.conversation;
   state.comparison = null;
-  closeDrawer(); renderPeople(); renderWorkspace();
+  closeDrawer(); renderPeople(); renderWorkspace(); await loadSessions();
 }
 
 async function refreshConversation() {
@@ -259,7 +259,7 @@ async function refreshConversation() {
     summary.conversation_status = state.conversation.status;
     summary.conversation_status_text = state.conversation.status_text;
   }
-  renderPeople(); renderWorkspace();
+  renderPeople(); renderWorkspace(); await loadSessions();
 }
 
 function renderWorkspace() {
@@ -749,27 +749,37 @@ function renderSessionBar() {
 }
 
 async function loadSessions() {
+  if (!state.person) return;
   const data = await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions');
   const sessions = data.sessions;
-  $("#sessions-list").innerHTML = sessions.length ? sessions.map(s => {
-    return '<article class="session-item ' + (s.active ? 'active' : '') + '" data-session-id="' + escapeHtml(s.session_id) + '">' +
-      '<button class="session-select" data-session-id="' + escapeHtml(s.session_id) + '"><strong>' + escapeHtml(s.title || '新对话') + '</strong>' +
-      '<small>' + s.message_count + ' 条消息 · ' + escapeHtml(shortTime(s.updated_at)) + '</small></button>' +
-      '<div class="session-actions"><button class="mini-button" data-rename-session="' + escapeHtml(s.session_id) + '">重命名</button>' +
-      '<button class="mini-button" data-delete-session="' + escapeHtml(s.session_id) + '">删除</button></div></article>';
-  }).join("") : '<p class="people-empty">暂无会话。</p>';
-  $$(".session-select").forEach(button => button.onclick = async () => {
+  $("#sidebar-sessions").hidden = false;
+  $("#sidebar-sessions-title").textContent = state.person.name + ' 的会话';
+  $("#sidebar-sessions-list").innerHTML = sessions.length ? sessions.map(s => {
+    return '<div class="sidebar-session' + (s.active ? ' active' : '') + '" data-session-id="' + escapeHtml(s.session_id) + '">' +
+      '<button class="ss-main" data-session-id="' + escapeHtml(s.session_id) + '">' +
+        '<span class="ss-title">' + escapeHtml(s.title || '新对话') + '</span>' +
+        '<span class="ss-meta">' + s.message_count + ' 条 · ' + escapeHtml(shortTime(s.updated_at)) + '</span>' +
+      '</button>' +
+      '<span class="ss-actions">' +
+        '<button class="ss-btn" data-rename-session="' + escapeHtml(s.session_id) + '" title="重命名">✎</button>' +
+        '<button class="ss-btn" data-delete-session="' + escapeHtml(s.session_id) + '" title="删除">✕</button>' +
+      '</span>' +
+    '</div>';
+  }).join("") : '<p class="people-empty">暂无会话</p>';
+  $$(".ss-main").forEach(button => button.onclick = async () => {
     await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.sessionId) + '/switch', {method:'POST', body:'{}'});
-    $("#sessions-dialog").close();
     await refreshConversation();
   });
-  $$("[data-rename-session]").forEach(button => button.onclick = async () => {
-    const title = prompt('新标题：', state.conversation?.session_title || '');
+  $$("[data-rename-session]").forEach(button => button.onclick = async (event) => {
+    event.stopPropagation();
+    const current = button.closest('.sidebar-session')?.querySelector('.ss-title')?.textContent || '';
+    const title = prompt('新标题：', current);
     if (title === null) return;
     await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.renameSession) + '/rename', {method:'POST', body:JSON.stringify({title})});
     await loadSessions(); await refreshConversation();
   });
-  $$("[data-delete-session]").forEach(button => button.onclick = async () => {
+  $$("[data-delete-session]").forEach(button => button.onclick = async (event) => {
+    event.stopPropagation();
     if (!confirm('删除这个会话？消息将无法恢复。')) return;
     await api('/api/people/' + encodeURIComponent(state.person.person_id) + '/conversation/sessions/' + encodeURIComponent(button.dataset.deleteSession), {method:'DELETE', body:'{}'});
     await loadSessions(); await refreshConversation();
@@ -784,7 +794,7 @@ function wire() {
   $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();
   $("#open-versions").onclick=()=>$("#versions-dialog").showModal(); $("#open-advanced").onclick=()=>{ $$(".person-menu").forEach(item=>item.hidden=true); $("#advanced-dialog").showModal(); };
   $("#new-conversation").onclick=()=>$("#new-conversation-dialog").showModal();
-  $("#open-sessions").onclick = async () => { await loadSessions(); $("#sessions-dialog").showModal(); };
+  $("#sidebar-new-conversation").onclick=()=>startNewConversation(null);
   $("#open-archive").onclick=async()=>{await loadArchive();$("#archive-dialog").showModal();};
   $("#open-model-picker").onclick=async()=>{await loadModelServices();$("#model-services-dialog").showModal();};
   $("#clear-dialogue-model").onclick=clearDialogueModel;

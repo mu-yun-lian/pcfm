@@ -19,6 +19,10 @@
       </label>
       <div id="people-list" class="people-list"></div>
       <div class="people-empty" id="people-empty" hidden>还没有人物。新建人物后，为他添加原始资料即可开始。</div>
+      <div class="sidebar-sessions" id="sidebar-sessions" hidden>
+        <div class="sidebar-sessions-head"><strong id="sidebar-sessions-title">会话</strong><button class="ss-new" id="sidebar-new-conversation" title="新对话">＋</button></div>
+        <div id="sidebar-sessions-list"></div>
+      </div>
       <div class="people-footer">
         <div class="archive-drop-zone" id="archive-drop-zone" aria-label="人物归档拖放区">
           <button class="footer-link" id="open-archive">人物归档 <span id="archive-count" class="count-badge">0</span></button>
@@ -50,14 +54,13 @@
             </div>
           </div>
           <div class="header-right">
-            <button type="button" id="session-title" class="session-title" onclick="document.getElementById('open-sessions').click()">新对话</button>
+            <span id="session-title" class="session-title">新对话</span>
             <span class="session-count" id="session-count">0 条消息</span>
             <span class="model-state" id="chat-model-state"></span>
             <details class="menu">
               <summary aria-label="更多操作">⋯</summary>
               <div class="menu-body">
                 <button type="button" id="new-conversation">新对话</button>
-                <button type="button" id="open-sessions">历史会话</button>
                 <button type="button" id="open-sources">人物资料</button>
                 <button type="button" id="open-versions">版本</button>
                 <button type="button" id="open-advanced">高级</button>
@@ -98,12 +101,6 @@
       </section>
     </main>
 
-    <dialog id="sessions-dialog" class="wide-dialog">
-      <div class="dialog-card">
-        <div class="dialog-head"><div><p class="kicker">会话管理</p><h2>历史会话</h2></div><button type="button" class="close-button" data-close="sessions-dialog">关闭</button></div>
-        <div id="sessions-list" class="source-list"></div>
-      </div>
-    </dialog>
 
     <aside class="comparison-drawer" id="comparison-drawer" hidden>
       <div class="drawer-head"><div><p class="kicker">可核验材料</p><h2>现实回答对照</h2></div><button class="close-button" id="close-drawer" aria-label="关闭">关闭</button></div>
