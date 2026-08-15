@@ -413,6 +413,12 @@ class V5ModelFixture:
                 ),
                 "snapshot": self.snapshot(""),
             }
+        if "rephrasing an answer" in system:
+            # 渲染层：测试里原样透传，不改变内容
+            return {
+                "text": json.dumps({"answer": str(payload.get("content", ""))}),
+                "snapshot": self.snapshot(""),
+            }
         material = str(payload["material"])
         domain = "health" if "hospital" in material.casefold() else "product"
         return {
@@ -537,11 +543,11 @@ class SimulationV5ProductIntegrationTests(unittest.TestCase):
             "Would you support a new aviation safety rule if it slows deployment?",
             dialogue_model_ref="fake:model",
         )
-        # 新架构：推导类问题走一次 LLM 统一推导（不再单独 planning）
+        # 新架构：推导类问题走一次 LLM 统一推导 + 一次独立渲染（不再单独 planning）
         self.assertEqual("general_assisted", reply["answer_status"])
         self.assertEqual("simulation-v5", reply["prediction_trace"]["kernel"])
         self.assertEqual(0, reply["model_usage"]["planning_calls"])
-        self.assertEqual(1, reply["model_usage"]["generation_calls"])
+        self.assertEqual(2, reply["model_usage"]["generation_calls"])
         self.assertTrue(reply["text"].startswith("I would prioritize safety"))
         self.assertEqual(
             "pcfm_conversation_conditioned_response_simulation_v5",

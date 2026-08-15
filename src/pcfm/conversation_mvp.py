@@ -2706,9 +2706,11 @@ class ConversationWorkbench:
             "but stay WITHIN the locked stance: never contradict the matched atoms' "
             "direction or value ranking. Do NOT invent this person's own biography, "
             "memories, or specific life events (that is their specific history, not "
-            "general knowledge). STEP 3 — WORDING: write it first-person, sharp and "
-            "specific, not a bland 'I'm concerned'. Return JSON with exactly "
-            "question_type, stance, tendency_ids, and answer. "
+            "general knowledge). STEP 3 — CONTENT: write it first-person, in "
+            "response_language, PLAIN and clear — express the locked stance and the "
+            "depth, but do NOT add stylistic flourish, characteristic tone, or "
+            "opening/connector phrases (wording will be styled separately). Return "
+            "JSON with exactly question_type, stance, tendency_ids, and answer. "
             "CONTEXT: conversation_state.current_topic is the topic being discussed "
             "RIGHT NOW. A short follow-up (why / what evidence / continue / more "
             "detail / 为什么 / 证据 / 继续 / 具体点) refers to the IMMEDIATELY "
@@ -2814,6 +2816,81 @@ class ConversationWorkbench:
             "fallback_used": False,
             "same_model_json_compatibility_retry": compatibility_retry,
             "verbatim_reason_retry": verbatim_retried,
+        }
+
+    def _render_person_answer(
+        self,
+        *,
+        person_id: str,
+        content: str,
+        model_ref: str,
+        is_chinese: bool,
+    ) -> tuple[str, dict[str, object]]:
+        """渲染层：只改措辞/语气/语言，不改立场、事实、论证。
+
+        推导层产出的是平实正文（立场+深度已锁），这里把它换成人物口吻。
+        任何失败都回退到平实正文，不缩成「保留判断」。
+        """
+        plain = str(content).strip()
+        if not plain:
+            return plain, {"status": "empty_content_no_render", "model_calls": 0}
+        if not model_ref or self._model_services is None:
+            return plain, {"status": "not_run_no_dialogue_model", "model_calls": 0}
+        try:
+            service, model_id = self._model_services.resolve_model_ref(model_ref)
+        except ModelServiceError:
+            return plain, {"status": "render_model_unavailable", "model_calls": 0}
+        person = self._person(person_id)
+        name = str(person.get("name", "")).strip() or "this person"
+        language = "Chinese" if is_chinese else "English"
+        system = (
+            f"You are rephrasing an answer spoken by {name}. Rewrite the supplied "
+            "content in their characteristic speaking style — sharp, direct, "
+            "first-person, short punchy sentences, confident — in "
+            f"{language}. ONLY reword: do NOT change the stance, claims, facts, "
+            "reasoning, numbers, or names; do NOT add or remove content. If it is "
+            "already in that style, return it nearly unchanged. Return JSON with "
+            "exactly answer."
+        )
+        payload = {
+            "content": plain,
+            "language": language,
+            "person_name": name,
+        }
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        temperature = self._generation_temperature(person_id)
+        try:
+            response = self._model_services.invoke(
+                str(service["service_id"]),
+                model_id,
+                messages,
+                structured=True,
+                temperature=temperature,
+            )
+        except ModelServiceError:
+            return plain, {"status": "render_failed_fallback_plain", "model_calls": 0}
+        try:
+            candidate = _json_mapping(response["text"])
+        except json.JSONDecodeError:
+            candidate = None
+        rendered = (
+            str(candidate.get("answer", "")).strip()
+            if isinstance(candidate, Mapping)
+            else ""
+        )
+        if not rendered or len(rendered) > 1200:
+            return plain, {"status": "render_invalid_fallback_plain", "model_calls": 1}
+        # 语言守门：中文问必须中文答，否则回退平实正文（平实正文已在推导层按语言写好）
+        if is_chinese and not re.search(r"[\u4e00-\u9fff]", rendered):
+            return plain, {"status": "render_language_mismatch_fallback_plain", "model_calls": 1}
+        return rendered, {
+            "status": "rendered",
+            "model_calls": 1,
+            "model_ref": model_ref,
+            "snapshot_id": dict(response["snapshot"])["snapshot_id"],
         }
 
     def _gate_unified_response(
@@ -3509,12 +3586,20 @@ class ConversationWorkbench:
                 )
                 gate_ok, gate_reason = self._gate_unified_response(unified, artifact)
                 structured = dict(predicted["structured_prediction"])
+                render_trace: dict[str, object] = {"status": "not_run", "model_calls": 0}
                 if unified["status"] == "ok" and gate_ok:
-                    answer_text = unified["answer"]
+                    plain_answer = unified["answer"]
                     stance = unified["stance"]
                     tendency_ids = [str(v) for v in unified.get("tendency_ids", [])]
                     evidence, evidence_event_ids, support = self._unified_evidence(
                         person_id, artifact, tendency_ids
+                    )
+                    # 渲染层独立：只改措辞/语气/语言，立场与内容已在推导层锁定
+                    answer_text, render_trace = self._render_person_answer(
+                        person_id=person_id,
+                        content=plain_answer,
+                        model_ref=selected_model_ref,
+                        is_chinese=bool(re.search(r"[\u4e00-\u9fff]", clean)),
                     )
                     person_prediction_status = (
                         "stance_atom_derived_depth_external"
@@ -3529,7 +3614,7 @@ class ConversationWorkbench:
                             "applicability": "unified_person_response",
                             "confidence": support,
                             "text": answer_text,
-                            "neutral_content": answer_text,
+                            "neutral_content": plain_answer,
                             "frozen_contract": None,
                             "frozen_contract_hash": None,
                             "structured_prediction_hash": None,
@@ -3563,8 +3648,11 @@ class ConversationWorkbench:
                                     "model_calls": int(unified.get("model_calls", 0)),
                                 },
                             },
-                            "style_status": "unified_person_generation",
-                            "style_gate": {"status": "unified_person_generation", "changed": False},
+                            "style_status": str(render_trace.get("status", "")),
+                            "style_gate": {
+                                "status": str(render_trace.get("status", "")),
+                                "changed": answer_text != plain_answer,
+                            },
                             "evidence": evidence,
                             "uncertainties": [],
                             "knowledge_source": "atom_stance_plus_external_depth",
@@ -3588,7 +3676,9 @@ class ConversationWorkbench:
                             "uncertainties": [],
                         }
                     )
-                generation_calls = int(unified.get("model_calls", 0))
+                generation_calls = int(unified.get("model_calls", 0)) + int(
+                    render_trace.get("model_calls", 0)
+                )
                 base["model_usage"] = {
                     "selected_model_ref": selected_model_ref,
                     "planning_calls": 0,
@@ -3759,12 +3849,19 @@ class ConversationWorkbench:
                         "model_calls": int(unified.get("model_calls", 0)),
                         "gate_reason": gate_reason,
                     }
+                    render_trace: dict[str, object] = {"status": "not_run", "model_calls": 0}
                     if unified["status"] == "ok" and gate_ok:
-                        rendered = unified["answer"]
-                        style_status = "unified_person_generation"
+                        plain = unified["answer"]
+                        rendered, render_trace = self._render_person_answer(
+                            person_id=person_id,
+                            content=plain,
+                            model_ref=selected_model_ref,
+                            is_chinese=bool(re.search(r"[\u4e00-\u9fff]", clean)),
+                        )
+                        style_status = str(render_trace.get("status", ""))
                         style_gate = {
-                            "status": "unified_person_generation",
-                            "changed": False,
+                            "status": str(render_trace.get("status", "")),
+                            "changed": rendered != plain,
                         }
                         base["knowledge_source"] = "atom_stance_plus_external_depth"
                         base["external_depth"] = bool(unified.get("tendency_ids"))
@@ -3792,7 +3889,9 @@ class ConversationWorkbench:
                         }
                         base["knowledge_source"] = "none"
                     generated_neutral = rendered
-                    render_calls = int(unified.get("model_calls", 0))
+                    render_calls = int(unified.get("model_calls", 0)) + int(
+                        render_trace.get("model_calls", 0)
+                    )
                     validation_calls = 0
                 else:
                     # Direct and similar-event answers already contain frozen,
