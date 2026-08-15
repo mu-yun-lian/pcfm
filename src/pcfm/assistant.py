@@ -93,6 +93,34 @@ class AssistantEngine:
         self._save_state(state)
         return state
 
+    def conversation(self):
+        """把助手历史导出成人物对话同构结构，供前端共用聊天界面。"""
+        state = self._load_state() or self.reset()
+        history = state.get("history", [])
+        messages = []
+        for index, item in enumerate(history):
+            messages.append(
+                {
+                    "message_id": "assistant-msg-%d" % index,
+                    "role": str(item.get("role", "user")),
+                    "text": str(item.get("content", "")),
+                    "status": "answered",
+                    "answer_status": "assistant",
+                    "person_prediction_status": "not_available",
+                    "knowledge_source": "assistant",
+                }
+            )
+        return {
+            "active_version": None,
+            "source_counts": {"confirmed": 0},
+            "profile": {"collection": {"status": "assistant", "message": "AI 助手"}},
+            "public_response_model": {},
+            "dialogue_model_ref": self._model_ref(state),
+            "status": "assistant",
+            "status_text": "AI 助手（操作员）",
+            "messages": messages,
+        }
+
     def _model_ref(self, state):
         configured = str(state.get("model_ref", "")).strip()
         if configured:

@@ -84,6 +84,11 @@ def create_handler(service: ProductService):
                         {"ok": True, "profile": service.expression_profile()}
                     )
                     return
+                if parts == ["api", "assistant", "conversation"]:
+                    self._send_json(
+                        {"ok": True, "conversation": service.assistant.conversation()}
+                    )
+                    return
                 if parts == ["api", "model-services"]:
                     self._send_json(
                         {"ok": True, "model_services": service.model_service_state()}

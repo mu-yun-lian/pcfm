@@ -246,6 +246,26 @@ async function selectPerson(personId) {
   closeDrawer(); renderPeople(); renderWorkspace(); await loadSessions();
 }
 
+function isAssistant() { return state.person?.person_id === "assistant"; }
+
+async function selectAssistant() {
+  const data = await api("/api/assistant/conversation");
+  state.person = { person_id: "assistant", name: "AI 助手", avatar: "/default-person-avatar.png" };
+  state.conversation = data.conversation;
+  state.comparison = null;
+  closeDrawer(); renderPeople(); renderWorkspace();
+  if (!state.conversation.messages.length) {
+    state.conversation.messages = [{ message_id: "assistant-greeting", role: "assistant", text: "我是 AI 助手，帮你操作这个系统。\n· 建人物\n· 加材料\n· 搜索\n· 归档 / 恢复 / 永久删除\n· 列出人物 / 归档列表", status: "answered", answer_status: "assistant" }];
+  }
+  renderMessages();
+}
+
+async function refreshAssistant() {
+  const data = await api("/api/assistant/conversation");
+  state.conversation = data.conversation;
+  renderMessages();
+}
+
 async function refreshConversation() {
   if (!state.person) return;
   const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation`);
@@ -265,6 +285,19 @@ async function refreshConversation() {
 function renderWorkspace() {
   if (!state.person || !state.conversation) return showEmptyWorkspace();
   $("#empty-chat").hidden = true; $("#chat-workspace").hidden = false;
+  if (isAssistant()) {
+    $("#chat-person-name").textContent = "AI 助手";
+    $("#chat-avatar").src = "/default-person-avatar.png";
+    $("#chat-version").textContent = "操作员助手";
+    $("#chat-source-count").textContent = "建人物 · 加材料 · 搜索 · 归档";
+    $("#collection-status").textContent = "说个意图，我列步骤帮你操作。";
+    const badge = $("#chat-model-state");
+    badge.textContent = "AI 助手（工具调用）";
+    badge.className = "model-state";
+    $("#open-model-picker").textContent = "助手模型";
+    renderMessages();
+    return;
+  }
   $("#chat-person-name").textContent = state.person.name;
   $("#chat-avatar").src = state.person.avatar || "/default-person-avatar.png";
   $("#chat-avatar").onerror = () => { $("#chat-avatar").src = "/default-person-avatar.png"; };
@@ -314,6 +347,18 @@ function evidenceHtml(message) {
 function renderMessages() {
   const container = $("#messages");
   const messages = state.conversation.messages;
+  if (isAssistant()) {
+    if (!messages.length) {
+      container.innerHTML = `<div class="messages-empty"><div><strong>AI 助手</strong><p>说个意图，我列步骤帮你操作：建人物 / 加材料 / 搜索 / 归档 / 恢复 / 永久删除。</p></div></div>`;
+      return;
+    }
+    container.innerHTML = messages.map(message => {
+      if (message.role === "user") return `<article class="message-row user"><div class="user-bubble">${escapeHtml(message.text)}</div></article>`;
+      return `<article class="message-row assistant"><img class="assistant-avatar" src="/default-person-avatar.png" alt=""><div class="assistant-body"><div class="answer">${escapeHtml(message.text).replace(/\n/g, "<br>")}</div></div></article>`;
+    }).join("");
+    requestAnimationFrame(() => container.scrollTop = container.scrollHeight);
+    return;
+  }
   if (!messages.length) {
     const suggestions = (state.person.recommended_questions || []).map(item => `<button type="button" class="suggestion-chip" data-suggested-question="${escapeHtml(item.text)}"><span>${escapeHtml(item.label)}</span>${escapeHtml(item.text)}</button>`).join("");
     container.innerHTML = `<div class="messages-empty"><div><strong>现在可以直接开始对话</strong><p>${state.conversation.active_version ? "系统会把当前消息作为完整会话状态的增量，再结合历史事件、人物公开取向和外部知识组织回答。" : "尚未建立人物模型；选择对话模型后仍可正常回答，但会标记为通用知识而非人物预测。"}</p>${suggestions ? `<div class="suggestion-list"><p>推荐测试问题</p>${suggestions}</div>` : ""}</div></div>`;
@@ -368,6 +413,13 @@ async function sendMessage(event) {
   status.hidden = true;
   busy(button, true, "生成中…");
   try {
+    if (isAssistant()) {
+      await api("/api/assistant/message", {method:"POST", body: JSON.stringify({text})});
+      form.elements.text.value = "";
+      await refreshAssistant();
+      await loadPeople();
+      return;
+    }
     const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/messages`, {method:"POST",body:JSON.stringify({text,reality_lookup_requested:lookup,dialogue_model_ref:state.conversation.dialogue_model_ref || ""})});
     form.elements.text.value = "";
     await refreshConversation();
@@ -564,7 +616,8 @@ function renderPeople() {
   const query = $("#person-search").value.trim().toLowerCase();
   const visible = state.people.filter(person => `${person.name} ${person.last_message}`.toLowerCase().includes(query));
   $("#people-empty").hidden = visible.length !== 0;
-  $("#people-list").innerHTML = visible.map(person => `
+  const assistantActive = state.person?.person_id === "assistant" ? "active" : "";
+  $("#people-list").innerHTML = `<article class="person-card ${assistantActive}" data-person-card="assistant"><button class="person-select" data-person-id="assistant"><span class="assistant-emoji">🤖</span><span><strong>AI 助手</strong><small class="recent">建人物·加材料·搜索·归档</small></span></button></article>` + visible.map(person => `
     <article class="person-card ${state.person?.person_id === person.person_id ? "active" : ""}" draggable="true" data-person-card="${escapeHtml(person.person_id)}">
       <button class="person-select" data-person-id="${escapeHtml(person.person_id)}">
         <img src="${escapeHtml(person.avatar || "/default-person-avatar.png")}" alt="${escapeHtml(person.name)}" onerror="this.src='/default-person-avatar.png'">
@@ -577,7 +630,7 @@ function renderPeople() {
         <button data-archive-person="${escapeHtml(person.person_id)}">移入归档</button>
       </div>
     </article>`).join("");
-  $$(".person-select").forEach(button => button.onclick = () => selectPerson(button.dataset.personId));
+  $$(".person-select").forEach(button => button.onclick = () => (button.dataset.personId === "assistant" ? selectAssistant() : selectPerson(button.dataset.personId)));
   $$('[data-person-more]').forEach(button => button.onclick = event => {
     event.stopPropagation();
     const menu = document.querySelector(`[data-person-menu="${CSS.escape(button.dataset.personMore)}"]`);
@@ -791,49 +844,10 @@ function renderSessionList() {
   });
 }
 
-function assistantGreeting() {
-  return '我是 AI 助手，帮你操作这个系统。说个意图我就列步骤：\n· 建人物\n· 加材料\n· 搜索\n· 归档 / 恢复 / 永久删除\n· 列出人物 / 归档列表';
-}
-function appendAssistant(role, text) {
-  const box = $('#assistant-messages');
-  const div = document.createElement('div');
-  div.className = 'assistant-msg ' + role;
-  div.textContent = text;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-}
-async function sendAssistant(event) {
-  event.preventDefault();
-  const input = $('#assistant-input');
-  const text = input.value.trim();
-  if (!text) return;
-  appendAssistant('user', text);
-  input.value = '';
-  const button = $('#assistant-form .button.primary');
-  busy(button, true, '处理中…');
-  try {
-    const data = await api('/api/assistant/message', {method:'POST', body: JSON.stringify({text})});
-    appendAssistant('assistant', data.assistant.reply);
-    await loadPeople();
-  } catch (error) {
-    appendAssistant('assistant', '出错了：' + error.message);
-  } finally {
-    busy(button, false);
-  }
-}
-async function resetAssistant() {
-  try { await api('/api/assistant/reset', {method:'POST', body:'{}'}); } catch (error) {}
-  $('#assistant-messages').innerHTML = '';
-  appendAssistant('assistant', assistantGreeting());
-}
-
 function wire() {
   $("#person-search").oninput=renderPeople;
   $("#session-search").oninput=renderSessionList;
-  $("#empty-create").onclick=()=>$("#assistant-dialog").showModal();
-  $("#assistant-open").onclick=()=>{ $("#assistant-dialog").showModal(); appendAssistant("assistant", assistantGreeting()); };
-  $("#assistant-form").onsubmit=sendAssistant;
-  $("#assistant-reset").onclick=resetAssistant;
+  $("#empty-create").onclick=()=>selectAssistant();
   $("#message-form").onsubmit=sendMessage;
   $("#message-form textarea").onkeydown=event=>{ if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("#message-form").requestSubmit($("#message-form .send-button"));} };
   $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();

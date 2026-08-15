@@ -12,7 +12,6 @@
   <div class="app-shell">
     <aside class="people-panel">
       <div class="sidebar-brand"><span class="brand-wordmark">PCFM</span><span class="brand-sub">对话式人物模拟</span></div>
-      <button class="assistant-pin" id="assistant-open" type="button">🤖 AI 助手<small>建人物·加材料·搜索·归档</small></button>
       <label class="sidebar-search">
         <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="13.6" y1="13.6" x2="18" y2="18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <input id="person-search" type="search" placeholder="搜索人物或最近对话">
@@ -109,18 +108,6 @@
       <div id="comparison-content"></div>
     </aside>
   </div>
-
-  <dialog id="assistant-dialog" class="wide-dialog">
-    <div class="dialog-card assistant-card">
-      <div class="dialog-head"><div><p class="kicker">操作员助手 · 引导式流程</p><h2>AI 助手</h2></div><button type="button" class="close-button" data-close="assistant-dialog">关闭</button></div>
-      <div id="assistant-messages" class="assistant-messages"></div>
-      <form id="assistant-form" class="assistant-form">
-        <input id="assistant-input" type="text" placeholder="说个意图：建人物 / 加材料 / 搜索 / 归档…" autocomplete="off">
-        <button class="button primary" type="submit">发送</button>
-        <button class="button quiet" type="button" id="assistant-reset">重来</button>
-      </form>
-    </div>
-  </dialog>
 
   <dialog id="person-dialog">
     <form class="dialog-card" id="person-form">
