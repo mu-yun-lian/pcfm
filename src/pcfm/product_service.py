@@ -18,6 +18,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from .applicability import PredictionRefusedError
+from .assistant import AssistantEngine
 from .contracts import Observation, Scenario
 from .cognitive_workbench import (
     CognitiveWorkbench,
@@ -181,6 +182,7 @@ class ProductService:
         self.expression_records_path = self.data_dir / "expression_renders.json"
         if not self.expression_records_path.exists():
             _write_json(self.expression_records_path, [])
+        self.assistant = AssistantEngine(self, self.data_dir / "assistant_state.json")
         self._lock = threading.RLock()
         if seed_example and not any(self.people_dir.iterdir()):
             self._seed_example()

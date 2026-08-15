@@ -166,6 +166,16 @@ def create_handler(service: ProductService):
             try:
                 parts = self._parts()
                 body = self._body()
+                if parts == ["api", "assistant", "message"]:
+                    result = service.assistant.handle(str(body.get("text", "")))
+                    self._send_json(
+                        {"ok": True, "assistant": result}, HTTPStatus.CREATED
+                    )
+                    return
+                if parts == ["api", "assistant", "reset"]:
+                    service.assistant.reset()
+                    self._send_json({"ok": True, "assistant": {"reply": "已重置。", "state": service.assistant._load_state()}})
+                    return
                 if parts == ["api", "conversation", "people"]:
                     person = service.create_conversation_person(
                         name=str(body.get("name", "")),

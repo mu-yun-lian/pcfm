@@ -356,3 +356,15 @@ dialog.wide-dialog{width:min(1120px,calc(100vw - 36px))}
   .model-choice button{width:100%}
   .model-settings .two-cols{grid-template-columns:1fr}
 }
+
+/* AI 助手 */
+.assistant-pin{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;color:var(--ink);background:linear-gradient(135deg,#eef6f1,#e7f0ec);text-align:left;cursor:pointer;font-size:14px}
+.assistant-pin small{color:var(--muted);font-size:11px;font-weight:400}
+.assistant-pin:hover{border-color:var(--forest)}
+.assistant-card{display:flex;flex-direction:column;height:min(76vh,620px)}
+.assistant-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px;background:#f7f8f6;border-radius:10px}
+.assistant-msg{max-width:82%;padding:9px 12px;border-radius:11px;font-size:14px;line-height:1.65;white-space:pre-wrap}
+.assistant-msg.assistant{align-self:flex-start;color:var(--ink);background:#fff;border:1px solid var(--line)}
+.assistant-msg.user{align-self:flex-end;color:#fff;background:var(--forest)}
+.assistant-form{display:flex;gap:8px;margin-top:12px}
+.assistant-form input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px}

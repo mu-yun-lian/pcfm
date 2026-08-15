@@ -791,10 +791,49 @@ function renderSessionList() {
   });
 }
 
+function assistantGreeting() {
+  return '我是 AI 助手，帮你操作这个系统。说个意图我就列步骤：\n· 建人物\n· 加材料\n· 搜索\n· 归档 / 恢复 / 永久删除\n· 列出人物 / 归档列表';
+}
+function appendAssistant(role, text) {
+  const box = $('#assistant-messages');
+  const div = document.createElement('div');
+  div.className = 'assistant-msg ' + role;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+async function sendAssistant(event) {
+  event.preventDefault();
+  const input = $('#assistant-input');
+  const text = input.value.trim();
+  if (!text) return;
+  appendAssistant('user', text);
+  input.value = '';
+  const button = $('#assistant-form .button.primary');
+  busy(button, true, '处理中…');
+  try {
+    const data = await api('/api/assistant/message', {method:'POST', body: JSON.stringify({text})});
+    appendAssistant('assistant', data.assistant.reply);
+    await loadPeople();
+  } catch (error) {
+    appendAssistant('assistant', '出错了：' + error.message);
+  } finally {
+    busy(button, false);
+  }
+}
+async function resetAssistant() {
+  try { await api('/api/assistant/reset', {method:'POST', body:'{}'}); } catch (error) {}
+  $('#assistant-messages').innerHTML = '';
+  appendAssistant('assistant', assistantGreeting());
+}
+
 function wire() {
   $("#person-search").oninput=renderPeople;
   $("#session-search").oninput=renderSessionList;
-  ["#new-person","#empty-create"].forEach(id=>$(id).onclick=()=>openPersonDialog(false));
+  $("#empty-create").onclick=()=>$("#assistant-dialog").showModal();
+  $("#assistant-open").onclick=()=>{ $("#assistant-dialog").showModal(); appendAssistant("assistant", assistantGreeting()); };
+  $("#assistant-form").onsubmit=sendAssistant;
+  $("#assistant-reset").onclick=resetAssistant;
   $("#message-form").onsubmit=sendMessage;
   $("#message-form textarea").onkeydown=event=>{ if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("#message-form").requestSubmit($("#message-form .send-button"));} };
   $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();
