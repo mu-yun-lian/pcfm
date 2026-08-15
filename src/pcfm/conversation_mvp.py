@@ -76,6 +76,62 @@ CHARACTER_GENERATION_TEMPERATURE = {
     "steve_jobs_v1": 0.65,
 }
 
+# 封闭词表的中文标签：中文问题时把推导输入的抽象字段本地化，
+# 使 LLM 上下文以中文为主，从而用中文回答。输出端(stance/tendency_ids)
+# 仍保持英文闭环词表，守门按英文校验。
+OBJECT_CATEGORY_ZH = {
+    "organization": "组织",
+    "individual": "个人",
+    "product": "产品",
+    "institution": "机构",
+    "market": "市场",
+    "technology": "技术",
+    "group": "群体",
+    "behavior": "行为",
+    "abstract_concept": "抽象概念",
+}
+STANCE_ZH = {
+    "support": "支持",
+    "oppose": "反对",
+    "neutral": "中立",
+    "conditional_support": "有条件支持",
+    "mixed": "混合",
+    "insufficient_evidence": "证据不足",
+}
+TENDENCY_TYPE_ZH = {
+    "object_evaluation": "对象评价",
+    "principle_priority": "原则优先",
+    "conditional_policy_preference": "条件性政策偏好",
+    "means_ends": "手段目的",
+    "responsibility_attribution": "责任归属",
+    "risk_tolerance": "风险容忍",
+    "rule_procedure_tradeoff": "规则程序权衡",
+    "behavior_evaluation": "行为评价",
+}
+EVENT_STRUCTURE_ZH = {
+    "conflict_management": "冲突处理",
+    "resource_allocation": "资源分配",
+    "risk_decision": "风险决策",
+    "personnel_choice": "人员选择",
+    "moral_evaluation": "道德评价",
+    "policy_stance": "政策立场",
+    "means_ends": "手段目的",
+    "responsibility_attribution": "责任归属",
+}
+DOMAIN_ZH = {
+    "health": "健康",
+    "technology": "技术",
+    "product": "产品",
+    "governance": "治理",
+    "economics": "经济",
+    "social": "社会",
+    "space": "航天",
+    "aviation": "航空",
+    "environment": "环境",
+    "education": "教育",
+    "personal": "个人",
+}
+
 
 class ConversationError(ValueError):
     pass
@@ -146,6 +202,55 @@ def _derivation_view(index: object) -> dict[str, object]:
                 "atoms": atoms,
             }
         result[str(domain)] = domain_view
+    return result
+
+
+def _localize_view(view: dict[str, object]) -> dict[str, object]:
+    """把推导视图的抽象字段翻译成中文（输入端本地化）。
+
+    只翻译 LLM 阅读的语义字段；atom_id 保持原样（供证据回填）。
+    输出端 stance/tendency_ids 仍按英文闭环词表，由调用方提示约束。
+    """
+    result: dict[str, object] = {}
+    for domain, cells in view.items():
+        domain_view: dict[str, object] = {}
+        for structure, cell in cells.items():
+            if not isinstance(cell, Mapping):
+                continue
+            atoms = []
+            for atom in cell.get("atoms", []):
+                if not isinstance(atom, Mapping):
+                    continue
+                item = dict(atom)
+                direction = str(item.get("direction", ""))
+                item["direction"] = STANCE_ZH.get(direction, direction)
+                target = str(item.get("target", ""))
+                item["target"] = OBJECT_CATEGORY_ZH.get(target, target)
+                for field in ("protected_interest_id", "accepted_cost_id"):
+                    value = str(item.get(field, ""))
+                    if value in INTERESTS:
+                        item[field] = str(INTERESTS[value].get("label_zh", value))
+                tendency = str(item.get("tendency_type", ""))
+                item["tendency_type"] = TENDENCY_TYPE_ZH.get(tendency, tendency)
+                atoms.append(item)
+            dominant = str(cell.get("dominant_value", ""))
+            domain_view[EVENT_STRUCTURE_ZH.get(str(structure), str(structure))] = {
+                "dominant_value": (
+                    str(INTERESTS[dominant].get("label_zh", dominant))
+                    if dominant in INTERESTS
+                    else dominant
+                ),
+                "opposes": [
+                    OBJECT_CATEGORY_ZH.get(str(value), str(value))
+                    for value in cell.get("opposes", [])
+                ],
+                "supports": [
+                    OBJECT_CATEGORY_ZH.get(str(value), str(value))
+                    for value in cell.get("supports", [])
+                ],
+                "atoms": atoms,
+            }
+        result[DOMAIN_ZH.get(str(domain), str(domain))] = domain_view
     return result
 
 
@@ -2550,6 +2655,9 @@ class ConversationWorkbench:
         # 回答语言随问题语言：中文问题必须中文回答，不被英文材料带偏。
         is_chinese = bool(re.search(r"[\u4e00-\u9fff]", str(text)))
         response_language = "Chinese" if is_chinese else "English"
+        # 中文问题时把抽象字段也本地化成中文，使 LLM 上下文以中文为主。
+        if is_chinese:
+            domain_tendency_index = _localize_view(domain_tendency_index)
         payload = {
             "person_identity": identity_note,
             "question": text,
@@ -2561,10 +2669,22 @@ class ConversationWorkbench:
             ],
             "conversation_state": copy.deepcopy(dict(conversation_context or {})),
             "domain_tendency_index": domain_tendency_index,
-            "allowed_tendency_types": sorted(TENDENCY_TYPES),
-            "allowed_interests": sorted(INTERESTS),
+            "allowed_tendency_types": (
+                sorted(TENDENCY_TYPE_ZH.values())
+                if is_chinese
+                else sorted(TENDENCY_TYPES)
+            ),
+            "allowed_interests": (
+                sorted(str(value.get("label_zh", "")) for value in INTERESTS.values())
+                if is_chinese
+                else sorted(INTERESTS)
+            ),
             "allowed_stances": sorted(STANCES),
-            "allowed_event_structure_types": sorted(EVENT_STRUCTURE_TYPES),
+            "allowed_event_structure_types": (
+                sorted(EVENT_STRUCTURE_ZH.values())
+                if is_chinese
+                else sorted(EVENT_STRUCTURE_TYPES)
+            ),
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
@@ -2573,6 +2693,8 @@ class ConversationWorkbench:
             "opposes (object categories), supports (object categories), atoms }. "
             "Each atom is an abstract tendency: direction (support/oppose/mixed), "
             "target category, protected interest, accepted cost, and tendency_type. "
+            "When response_language is Chinese these fields are already translated "
+            "to Chinese — read them in Chinese and answer in Chinese. "
             "To answer: (1) identify the question's domain AND its event-structure "
             "subdivision; (2) read that subdivision's value tendency (dominant_value, "
             "opposes, supports); (3) drop back to its atoms and match by the atom's "
@@ -2588,9 +2710,11 @@ class ConversationWorkbench:
             "For identity questions (question_type=identity), answer ONLY from "
             "person_identity — that field is authoritative for who this person is; "
             "do not invent a name, role, or biography beyond it. "
-            "stance is one of the allowed_stances. tendency_ids lists only the "
-            "atom_ids values from the domain_tendency_index entries you actually "
-            "relied on. "
+            "stance must be one of the ENGLISH allowed_stances "
+            "(support/oppose/neutral/conditional_support/mixed/insufficient_evidence) "
+            "— even though the atom fields may be in Chinese, map the direction back "
+            "to its English stance value. tendency_ids lists only the atom_ids values "
+            "from the domain_tendency_index entries you actually relied on. "
             "answer is the person's first-person reply, under 1200 characters. "
             "response_language tells you which language to write in. If "
             "response_language is Chinese, the WHOLE answer MUST be Chinese — never "
