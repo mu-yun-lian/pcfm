@@ -448,6 +448,59 @@ class ConversationWorkbench:
         active = self._active_session_id(person_id)
         return [self._session_meta(item, active) for item in self._list_sessions(person_id)]
 
+    def create_session(self, person_id: str) -> dict[str, object]:
+        now = _utc_now()
+        sid = self._new_session_id()
+        session = {
+            "schema_version": SCHEMA_VERSION,
+            "session_id": sid,
+            "person_id": person_id,
+            "title": "新对话",
+            "created_at": now,
+            "updated_at": now,
+            "message_count": 0,
+            "dialogue_state": {"status": "empty", "topic_threads": [], "active_topic_id": "", "active_topic_message_ids": []},
+            "messages": [],
+        }
+        self._write_session(person_id, session)
+        state = self._state(person_id)
+        state["active_session_id"] = sid
+        _write_json(self._path(person_id, "conversation_state.json"), state)
+        return self._session_meta(session, sid)
+
+    def switch_session(self, person_id: str, session_id: str) -> dict[str, object]:
+        self._read_session(person_id, session_id)
+        state = self._state(person_id)
+        state["active_session_id"] = str(session_id)
+        _write_json(self._path(person_id, "conversation_state.json"), state)
+        return self._session_meta(self._read_session(person_id, session_id), str(session_id))
+
+    def rename_session(self, person_id: str, session_id: str, title: str) -> dict[str, object]:
+        session = self._read_session(person_id, session_id)
+        clean = str(title).strip()
+        if not clean:
+            raise ConversationError("标题不能为空。")
+        session["title"] = clean[:100]
+        self._write_session(person_id, session)
+        active = str(self._state(person_id).get("active_session_id", ""))
+        return self._session_meta(session, active)
+
+    def delete_session(self, person_id: str, session_id: str) -> dict[str, object]:
+        sessions = self._list_sessions(person_id)
+        remaining = [item for item in sessions if str(item["session_id"]) != str(session_id)]
+        path = self._session_path(person_id, session_id)
+        if path.exists():
+            path.unlink()
+        state = self._state(person_id)
+        if not remaining:
+            meta = self.create_session(person_id)
+            return {"active_session_id": meta["session_id"], "sessions": [meta]}
+        if str(state.get("active_session_id", "")) == str(session_id):
+            state["active_session_id"] = str(remaining[0]["session_id"])
+            _write_json(self._path(person_id, "conversation_state.json"), state)
+        active = str(self._state(person_id).get("active_session_id", ""))
+        return {"active_session_id": active, "sessions": [self._session_meta(item, active) for item in remaining]}
+
     def _person(self, person_id: str) -> dict[str, object]:
         raw = _read_json(self._path(person_id, "person.json"), {})
         if not isinstance(raw, dict):
@@ -479,42 +532,9 @@ class ConversationWorkbench:
         return copy.deepcopy(state)
 
     def start_new_conversation(self, person_id: str) -> dict[str, object]:
-        """Start with empty context while preserving the prior transcript locally."""
+        """新建一个空会话并设为活跃；旧的归档到 conversation_archives 已由会话文件取代。"""
         self.profile(person_id)
-        messages = self._list(person_id, "conversation_messages.json")
-        archive_id = ""
-        if messages:
-            archive_id = f"conversation-{uuid.uuid4().hex[:12]}"
-            archive_path = (
-                self._person_dir(person_id)
-                / "conversation_archives"
-                / f"{archive_id}.json"
-            )
-            _write_json(
-                archive_path,
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "archive_id": archive_id,
-                    "person_id": person_id,
-                    "archived_at": _utc_now(),
-                    "active_version": self._state(person_id).get("active_version"),
-                    "messages": messages,
-                },
-            )
-        _write_json(self._path(person_id, "conversation_messages.json"), [])
-        state = self._state(person_id)
-        state["dialogue_state"] = {
-            "status": "empty",
-            "topic_threads": [],
-            "active_topic_id": "",
-            "active_topic_message_ids": [],
-        }
-        _write_json(self._path(person_id, "conversation_state.json"), state)
-        return {
-            "archive_id": archive_id,
-            "archived_message_count": len(messages),
-            "message_count": 0,
-        }
+        return self.create_session(person_id)
 
     def _telemetry(self, person_id: str) -> dict[str, int]:
         raw = _read_json(

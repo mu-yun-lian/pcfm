@@ -97,3 +97,52 @@ class SessionMigrationTests(unittest.TestCase):
         # dialogue_state 从 conversation_state.json 保留，而不是被重置为空
         full = self.service.conversation._read_session(self.person_id, sid)
         self.assertEqual("t1", full["dialogue_state"]["active_topic_id"])
+
+
+class SessionCrudTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.storage = Path(self.temporary.name)
+        self.service = ProductService(self.storage, seed_example=False)
+        self.person = self.service.create_conversation_person(name="Alice Example")
+        self.person_id = str(self.person["person_id"])
+        self.cv = self.service.conversation
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_create_switch_rename_delete_roundtrip(self) -> None:
+        a = self.cv.create_session(self.person_id)
+        b = self.cv.create_session(self.person_id)
+        self.assertNotEqual(a["session_id"], b["session_id"])
+        self.assertEqual(b["session_id"], self.cv._active_session_id(self.person_id))
+        switched = self.cv.switch_session(self.person_id, a["session_id"])
+        self.assertEqual(a["session_id"], switched["session_id"])
+        self.assertEqual(a["session_id"], self.cv._active_session_id(self.person_id))
+        renamed = self.cv.rename_session(self.person_id, a["session_id"], "产品讨论")
+        self.assertEqual("产品讨论", renamed["title"])
+        result = self.cv.delete_session(self.person_id, b["session_id"])
+        ids = {s["session_id"] for s in result["sessions"]}
+        self.assertNotIn(b["session_id"], ids)
+        self.assertEqual(a["session_id"], self.cv._active_session_id(self.person_id))
+
+    def test_delete_active_switches_to_most_recent(self) -> None:
+        a = self.cv.create_session(self.person_id)
+        self.cv.create_session(self.person_id)
+        result = self.cv.delete_session(self.person_id, a["session_id"])
+        remaining = result["sessions"]
+        self.assertEqual(1, len(remaining))
+        self.assertEqual(result["active_session_id"], remaining[0]["session_id"])
+
+    def test_delete_last_session_creates_empty_one(self) -> None:
+        only = self.cv.list_sessions(self.person_id)[0]
+        result = self.cv.delete_session(self.person_id, only["session_id"])
+        self.assertEqual(1, len(result["sessions"]))
+        self.assertNotEqual(only["session_id"], result["sessions"][0]["session_id"])
+        self.assertEqual("新对话", result["sessions"][0]["title"])
+
+    def test_rename_blank_title_rejected(self) -> None:
+        sid = self.cv.create_session(self.person_id)["session_id"]
+        with self.assertRaises(Exception):
+            self.cv.rename_session(self.person_id, sid, "   ")
+
