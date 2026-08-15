@@ -375,6 +375,25 @@ class ConversationWorkbench:
         sessions.sort(key=lambda value: str(value.get("updated_at", "")), reverse=True)
         return sessions
 
+    def _active_messages(self, person_id: str) -> list[dict[str, object]]:
+        session_id = self._active_session_id(person_id)
+        session = self._read_session(person_id, session_id)
+        return [dict(item) for item in session.get("messages", [])]
+
+    def _save_active_messages(self, person_id, messages, dialogue_state=None) -> None:
+        session_id = self._active_session_id(person_id)
+        session = self._read_session(person_id, session_id)
+        session["messages"] = [dict(item) for item in messages]
+        session["message_count"] = len(messages)
+        session["updated_at"] = _utc_now()
+        if dialogue_state is not None:
+            session["dialogue_state"] = dict(dialogue_state)
+        if session.get("title") in ("", "新对话"):
+            first_user = next((item for item in messages if str(item.get("role", "")) == "user" and str(item.get("text", "")).strip()), None)
+            if first_user is not None:
+                session["title"] = str(first_user["text"]).strip()[:24]
+        self._write_session(person_id, session)
+
     def _active_session_id(self, person_id: str) -> str:
         state = self._state(person_id)
         active = state.get("active_session_id")
@@ -3270,7 +3289,7 @@ class ConversationWorkbench:
         clean = str(text).strip()
         if not clean:
             raise ConversationError("请输入消息。")
-        messages = self._list(person_id, "conversation_messages.json")
+        messages = self._active_messages(person_id)
         prior_messages = copy.deepcopy(messages)
         profile = self.profile(person_id)
         conversation_context = self._conversation_context(
@@ -3537,10 +3556,7 @@ class ConversationWorkbench:
                     "fallback_used": False,
                 }
                 messages.append(base)
-                _write_json(self._path(person_id, "conversation_messages.json"), messages)
-                state = self._state(person_id)
-                state["dialogue_state"] = self._conversation_context(profile, messages, "")
-                _write_json(self._path(person_id, "conversation_state.json"), state)
+                self._save_active_messages(person_id, messages, dialogue_state=self._conversation_context(profile, messages, ""))
                 return copy.deepcopy(base)
             needs_semantic_help = predicted["answer_status"] in {
                 "general_assisted",
@@ -3841,16 +3857,11 @@ class ConversationWorkbench:
             "fallback_used": False,
         }
         messages.append(base)
-        _write_json(self._path(person_id, "conversation_messages.json"), messages)
-        state = self._state(person_id)
-        state["dialogue_state"] = self._conversation_context(
-            profile, messages, ""
-        )
-        _write_json(self._path(person_id, "conversation_state.json"), state)
+        self._save_active_messages(person_id, messages, dialogue_state=self._conversation_context(profile, messages, ""))
         return copy.deepcopy(base)
 
     def _find_message(self, person_id: str, message_id: str) -> tuple[list[dict[str, object]], dict[str, object]]:
-        messages = self._list(person_id, "conversation_messages.json")
+        messages = self._active_messages(person_id)
         try:
             message = next(item for item in messages if item["message_id"] == message_id)
         except StopIteration as error:
@@ -3899,7 +3910,7 @@ class ConversationWorkbench:
             }
             message["comparison"] = result
             message["reality_lookup_status"] = "not_found"
-            _write_json(self._path(person_id, "conversation_messages.json"), messages)
+            self._save_active_messages(person_id, messages)
             return result
         best = reality_candidates[0]
         predicted = str(message.get("neutral_content") or message.get("text", ""))
@@ -3936,7 +3947,7 @@ class ConversationWorkbench:
         }
         message["comparison"] = comparison
         message["reality_lookup_status"] = "candidate_found"
-        _write_json(self._path(person_id, "conversation_messages.json"), messages)
+        self._save_active_messages(person_id, messages)
         return copy.deepcopy(comparison)
 
     def create_optimization_candidate(
@@ -4454,7 +4465,7 @@ class ConversationWorkbench:
             raise ConversationError("反馈类型无效。")
         messages, message = self._find_message(person_id, message_id)
         message["feedback"] = {"value": value, "created_at": _utc_now()}
-        _write_json(self._path(person_id, "conversation_messages.json"), messages)
+        self._save_active_messages(person_id, messages)
         return copy.deepcopy(message)
 
     def _baseline_files_tag(self) -> tuple:
@@ -4555,7 +4566,9 @@ class ConversationWorkbench:
         sources = self._list(person_id, "conversation_sources.json")
         state = self._state(person_id)
         versions = self._list(person_id, "conversation_versions.json")
-        messages = self._list(person_id, "conversation_messages.json")
+        session_id = self._active_session_id(person_id)
+        session = self._read_session(person_id, session_id)
+        messages = [dict(item) for item in session.get("messages", [])]
         candidates = self._list(person_id, "optimization_candidates.json")
         confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
         active = state.get("active_version")
@@ -4590,7 +4603,10 @@ class ConversationWorkbench:
             },
             "active_version": active,
             "dialogue_model_ref": str(state.get("dialogue_model_ref", "")),
-            "dialogue_state": copy.deepcopy(dict(state.get("dialogue_state") or {})),
+            "dialogue_state": copy.deepcopy(dict(session.get("dialogue_state") or {})),
+            "session_id": session_id,
+            "session_title": str(session.get("title", "")),
+            "active_session_id": session_id,
             "dialogue_model_status": (
                 "尚未选择对话模型；使用确定性证据计划与本地表达层"
                 if not state.get("dialogue_model_ref")
