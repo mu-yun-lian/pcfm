@@ -126,13 +126,15 @@ class SessionCrudTests(unittest.TestCase):
         self.assertNotIn(b["session_id"], ids)
         self.assertEqual(a["session_id"], self.cv._active_session_id(self.person_id))
 
-    def test_delete_active_switches_to_most_recent(self) -> None:
+    def test_delete_active_switches_to_remaining_session(self) -> None:
         a = self.cv.create_session(self.person_id)
-        self.cv.create_session(self.person_id)
-        result = self.cv.delete_session(self.person_id, a["session_id"])
-        remaining = result["sessions"]
-        self.assertEqual(1, len(remaining))
-        self.assertEqual(result["active_session_id"], remaining[0]["session_id"])
+        b = self.cv.create_session(self.person_id)
+        c = self.cv.create_session(self.person_id)  # active 是 c
+        result = self.cv.delete_session(self.person_id, c["session_id"])
+        remaining_ids = {s["session_id"] for s in result["sessions"]}
+        self.assertEqual({a["session_id"], b["session_id"]}, remaining_ids)
+        self.assertIn(result["active_session_id"], {a["session_id"], b["session_id"]})
+        self.assertNotEqual(c["session_id"], result["active_session_id"])
 
     def test_delete_last_session_creates_empty_one(self) -> None:
         only = self.cv.list_sessions(self.person_id)[0]
@@ -145,4 +147,8 @@ class SessionCrudTests(unittest.TestCase):
         sid = self.cv.create_session(self.person_id)["session_id"]
         with self.assertRaises(Exception):
             self.cv.rename_session(self.person_id, sid, "   ")
+
+    def test_delete_unknown_session_rejected(self) -> None:
+        with self.assertRaises(Exception):
+            self.cv.delete_session(self.person_id, "session-does-not-exist")
 

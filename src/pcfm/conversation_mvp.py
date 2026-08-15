@@ -486,6 +486,7 @@ class ConversationWorkbench:
         return self._session_meta(session, active)
 
     def delete_session(self, person_id: str, session_id: str) -> dict[str, object]:
+        self._read_session(person_id, session_id)
         sessions = self._list_sessions(person_id)
         remaining = [item for item in sessions if str(item["session_id"]) != str(session_id)]
         path = self._session_path(person_id, session_id)
