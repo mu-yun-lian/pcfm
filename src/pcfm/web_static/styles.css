@@ -367,6 +367,7 @@ dialog.wide-dialog{width:min(1120px,calc(100vw - 36px))}
 .person-avatar-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;background:#eef1ee;border:1px solid var(--line)}
 .avatar-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .avatar-actions small{color:var(--muted);font-size:11px}
+.person-card.file-over{outline:2px dashed var(--forest);outline-offset:-2px;background:#f2faf6}
 .provider-list-head{display:flex;justify-content:flex-end;margin:10px 0}
 .key-wrap{position:relative;display:flex;align-items:center}
 .key-wrap input{padding-right:34px}

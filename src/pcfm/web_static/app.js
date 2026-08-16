@@ -167,13 +167,34 @@ async function submitModelService(event) {
   const submitBtn = form.querySelector('button[type="submit"]');
   try {
     busy(submitBtn, true, "保存中…");
-    await api("/api/model-services",{method:"POST",body:JSON.stringify(body)});
+    const data=await api("/api/model-services",{method:"POST",body:JSON.stringify(body)});
     form.reset(); form.elements.timeout_seconds.value="30"; form.elements.enabled.checked=true; form.elements.structured_output.checked=true; $("#model-preset-select").value="";
     await loadModelServices();
-    toast("配置已保存，尚未调用模型。请先刷新模型列表，再验证要使用的模型。");
+    toast("已保存，正在自动读取模型并验证…");
+    await autoVerifyService(String(data.service_id));
   }
   catch(error){toast(error.message,true);}
   finally { busy(submitBtn, false); }
+}
+
+async function autoVerifyService(serviceId) {
+  try {
+    await api(`/api/model-services/${encodeURIComponent(serviceId)}/refresh-models`, {method:"POST", body:"{}"});
+    await loadModelServices();
+    const service = state.modelServices.services.find(s => s.service_id === serviceId);
+    const models = service?.enabled_models || service?.models || [];
+    const modelId = service?.default_model || models[0];
+    if (!modelId) { toast("已保存，但没读到模型；可手动填模型 ID 后刷新。"); return; }
+    const data = await api(`/api/model-services/${encodeURIComponent(serviceId)}/test`, {method:"POST", body: JSON.stringify({model_id: modelId})});
+    if (data.result?.status === "connected" && state.person) {
+      const modelRef = `${serviceId}:${modelId}`;
+      await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/model`, {method:"POST", body: JSON.stringify({model_ref: modelRef})});
+      await refreshConversation();
+    }
+    await loadModelServices();
+    const ok = data.result?.status === "connected";
+    toast(ok ? (state.person ? "已保存并自动验证，已用于当前人物。" : "已保存并自动验证通过。") : (data.result?.message || "已保存，但验证未通过。"), !ok);
+  } catch (error) { toast("已保存，但自动验证失败：" + error.message, true); }
 }
 
 function editModelService(serviceId) {
@@ -334,7 +355,8 @@ function renderWorkspace() {
     verified_demo_materials_loaded:"已载入可追溯的一手演示资料；预测仍属探索性，准确性尚未验证。",
   };
   const modelView = state.conversation.public_response_model || {};
-  $("#collection-status").textContent = `${collectionMessages[collection.status] || collection.message || "资料状态尚未记录。"} 当前模拟层：${modelView.event_frame_count || 0} 个事件原子、${modelView.value_atom_count || 0} 个单事件公开取向原子、${modelView.value_orientation_count || 0} 个聚合公开取向、${modelView.preference_structure_count || 0} 个明确取舍结构、${modelView.knowledge_claim_count || 0} 条人物公开使用的知识主张。`;
+  const stepHint = state.conversation.active_version ? "" : " 还差几步就能对话：加材料 → 「一键处理全部材料」→ 形成版本。";
+  $("#collection-status").textContent = `${collectionMessages[collection.status] || collection.message || "资料状态尚未记录。"}${stepHint} 当前模拟层：${modelView.event_frame_count || 0} 个事件原子、${modelView.value_atom_count || 0} 个单事件公开取向原子、${modelView.value_orientation_count || 0} 个聚合公开取向、${modelView.preference_structure_count || 0} 个明确取舍结构、${modelView.knowledge_claim_count || 0} 条人物公开使用的知识主张。`;
   const networkNote = $(".network-note p");
   if (networkNote) networkNote.textContent = collection.mode === "system_search"
     ? $("#collection-status").textContent
@@ -526,6 +548,39 @@ async function reviewSource(sourceId, decision, button) {
   finally { busy(button, false); }
 }
 
+async function processAllMaterials() {
+  if (!state.person) return;
+  const button = $("#process-all-materials");
+  busy(button, true, "处理中…");
+  const base = `/api/people/${encodeURIComponent(state.person.person_id)}/conversation/sources`;
+  try {
+    for (const source of state.conversation.sources) {
+      if (source.review_status === "pending") {
+        await api(`${base}/${encodeURIComponent(source.source_id)}/review`, {method:"POST", body: JSON.stringify({decision: "confirmed"})});
+      }
+    }
+    await refreshConversation();
+    for (const source of state.conversation.sources) {
+      if (source.review_status === "confirmed" && !(source.llm_response_event_candidates || []).length) {
+        await api(`${base}/${encodeURIComponent(source.source_id)}/extract-candidates`, {method:"POST", body:"{}"});
+      }
+    }
+    await refreshConversation();
+    let confirmed = 0;
+    for (const source of state.conversation.sources) {
+      for (const candidate of source.llm_response_event_candidates || []) {
+        if ((candidate.review_status || "pending") === "pending") {
+          await api(`${base}/${encodeURIComponent(source.source_id)}/candidates/${encodeURIComponent(candidate.candidate_id)}/review`, {method:"POST", body: JSON.stringify({decision: "confirmed"})});
+          confirmed++;
+        }
+      }
+    }
+    await refreshConversation();
+    toast(confirmed ? `处理完成：确认 ${confirmed} 条候选，已形成新人物版本。` : "处理完成：没有待确认的候选。");
+  } catch (error) { toast(error.message, true); }
+  finally { busy(button, false); }
+}
+
 async function reviewOptimization(candidateId, decision, button) {
   busy(button, true, "校验中…");
   try {
@@ -700,6 +755,28 @@ function renderPeople() {
       card.classList.remove("dragging");
       state.draggedPersonId = null;
       setArchiveDropState();
+    });
+    card.addEventListener("dragover", event => {
+      if ([...event.dataTransfer.types].includes("Files")) { event.preventDefault(); card.classList.add("file-over"); }
+    });
+    card.addEventListener("dragleave", event => { if (!card.contains(event.relatedTarget)) card.classList.remove("file-over"); });
+    card.addEventListener("drop", async event => {
+      if (![...event.dataTransfer.types].includes("Files")) return;
+      event.preventDefault();
+      card.classList.remove("file-over");
+      const files = [...event.dataTransfer.files];
+      if (!files.length) return;
+      const personId = card.dataset.personCard;
+      if (personId === "assistant") { toast("AI 助手不接收资料文件。", true); return; }
+      await selectPerson(personId);
+      for (const file of files) {
+        try {
+          const content_base64 = await fileToBase64(file);
+          await api(`/api/people/${encodeURIComponent(personId)}/conversation/sources/file`, {method:"POST", body: JSON.stringify({filename: file.name, content_base64, speaker: state.person?.name || "", source_date: "", dataset_role: "model_source", content_authenticity: "unverified_material", speaker_scope: "single_speaker_entire_document"})});
+        } catch (error) { toast("上传「" + file.name + "」失败：" + error.message, true); }
+      }
+      await refreshConversation();
+      toast("已把 " + files.length + " 份文件添加为待审核资料，可在「人物资料」里一键处理。");
     });
   });
   $$('[data-person-drag]').forEach(handle => {
@@ -897,7 +974,7 @@ function wire() {
   $("#empty-create").onclick=()=>selectAssistant();
   $("#message-form").onsubmit=sendMessage;
   $("#message-form textarea").onkeydown=event=>{ if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();$("#message-form").requestSubmit($("#message-form .send-button"));} };
-  $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal();
+  $("#open-sources").onclick=()=>$("#sources-dialog").showModal(); $("#composer-add-source").onclick=()=>$("#sources-dialog").showModal(); $("#process-all-materials").onclick=processAllMaterials;
   $("#open-versions").onclick=()=>$("#versions-dialog").showModal(); $("#open-advanced").onclick=()=>{ $$(".person-menu").forEach(item=>item.hidden=true); $("#advanced-dialog").showModal(); };
   $("#new-conversation").onclick=()=>$("#new-conversation-dialog").showModal();
   $("#sidebar-new-conversation").onclick=()=>startNewConversation(null);
