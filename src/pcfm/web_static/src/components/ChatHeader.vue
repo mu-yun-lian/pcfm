@@ -75,6 +75,7 @@ function openModelPicker() {
 
 <template>
   <header class="chat-header">
+    <button type="button" class="hamburger" aria-label="打开人物列表" @click="store.toggleSidebar()">☰</button>
     <div class="person-heading">
       <img :src="avatarSrc" alt="人物头像" @error="onAvatarError" />
       <div class="person-heading-text">

@@ -92,7 +92,7 @@ watch(
 </script>
 
 <template>
-  <div ref="messagesEl" class="messages">
+  <div ref="messagesEl" class="messages" aria-live="polite">
     <!-- AI assistant conversation -->
     <template v-if="store.isAssistant">
       <div v-if="!messages.length" class="messages-empty">

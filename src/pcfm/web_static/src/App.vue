@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onBeforeUnmount } from 'vue'
 import { useAppStore } from './stores/app'
 import PeopleSidebar from './components/PeopleSidebar.vue'
 import ComparisonDrawer from './components/ComparisonDrawer.vue'
@@ -15,7 +15,20 @@ import AdvancedDialog from './components/dialogs/AdvancedDialog.vue'
 
 const store = useAppStore()
 
-onMounted(() => store.bootstrap())
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (store.comparison) store.closeComparison()
+  if (store.sidebarOpen) store.closeSidebar()
+}
+
+onMounted(() => {
+  store.bootstrap()
+  window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
 
 function reloadPage() {
   window.location.reload()
@@ -34,7 +47,8 @@ async function undoToast() {
     <button type="button" @click="reloadPage">重新检查</button>
   </div>
 
-  <div class="app-shell" :class="{ 'drawer-open': store.comparison }">
+  <div class="app-shell" :class="{ 'drawer-open': store.comparison, 'sidebar-open': store.sidebarOpen }">
+    <div v-if="store.sidebarOpen" class="sidebar-backdrop" @click="store.closeSidebar()"></div>
     <PeopleSidebar />
     <main class="chat-panel">
       <router-view />

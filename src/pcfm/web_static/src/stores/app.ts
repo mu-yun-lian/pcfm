@@ -36,6 +36,7 @@ export const useAppStore = defineStore('app', {
     composerFocusRequest: 0,
     activeJobId: null as string | null,
     creatingPerson: false as boolean,
+    sidebarOpen: false as boolean,
     toast: null as null | { message: string; error: boolean; action?: () => Promise<void> },
   }),
 
@@ -76,6 +77,12 @@ export const useAppStore = defineStore('app', {
     openCreatePerson() {
       this.creatingPerson = true
       this.activeDialog = 'person'
+    },
+    toggleSidebar() {
+      this.sidebarOpen = !this.sidebarOpen
+    },
+    closeSidebar() {
+      this.sidebarOpen = false
     },
     requestComposerFocus() {
       this.composerFocusRequest++
