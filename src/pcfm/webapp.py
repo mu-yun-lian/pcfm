@@ -17,6 +17,12 @@ from .services import ProductError, PcfmService
 
 
 STATIC_DIR = Path(__file__).with_name("web_static")
+
+
+def _static_root() -> Path:
+    """Vue 构建产物优先; 未构建时回退到旧静态目录。"""
+    dist = STATIC_DIR / "dist"
+    return dist if (dist / "index.html").exists() else STATIC_DIR
 from . import APP_VERSION
 DEFAULT_DATA_DIR = Path.home() / "PCFM人物对话系统数据"
 
@@ -187,10 +193,11 @@ def create_handler(service: PcfmService):
                 self._error(error)
 
         def _serve_static(self, parts: list[str]) -> None:
+            root = _static_root()
             relative = "index.html" if not parts else "/".join(parts)
-            target = (STATIC_DIR / relative).resolve()
-            if STATIC_DIR.resolve() not in target.parents or not target.is_file():
-                target = STATIC_DIR / "index.html"
+            target = (root / relative).resolve()
+            if root.resolve() not in target.parents or not target.is_file():
+                target = root / "index.html"
             content = target.read_bytes()
             mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             self.send_response(HTTPStatus.OK)
