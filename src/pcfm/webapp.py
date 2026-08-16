@@ -406,18 +406,22 @@ def create_handler(service: ProductService):
                         self._send_json({"ok": True, "source": result})
                         return
                     if action == ["conversation", "messages"]:
-                        result = service.send_conversation_message(
+                        job = service.job_runner.submit(
+                            "send_message",
                             person_id,
-                            str(body.get("text", "")),
-                            reality_lookup_requested=bool(
-                                body.get("reality_lookup_requested", False)
-                            ),
-                            dialogue_model_ref=str(
-                                body.get("dialogue_model_ref", "")
+                            lambda progress=None, cancel=None: service.send_conversation_message(
+                                person_id,
+                                str(body.get("text", "")),
+                                reality_lookup_requested=bool(
+                                    body.get("reality_lookup_requested", False)
+                                ),
+                                dialogue_model_ref=str(
+                                    body.get("dialogue_model_ref", "")
+                                ),
                             ),
                         )
                         self._send_json(
-                            {"ok": True, "message": result}, HTTPStatus.CREATED
+                            {"ok": True, "job_id": job.job_id}, HTTPStatus.CREATED
                         )
                         return
                     if action == ["conversation", "new"]:

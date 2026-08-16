@@ -488,10 +488,22 @@ async function sendMessage(event) {
       await loadPeople();
       return;
     }
-    const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/messages`, {method:"POST",body:JSON.stringify({text,reality_lookup_requested:lookup,dialogue_model_ref:state.conversation.dialogue_model_ref || ""})});
+    const res = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/messages`, {method:"POST",body:JSON.stringify({text,reality_lookup_requested:lookup,dialogue_model_ref:state.conversation.dialogue_model_ref || ""})});
     form.elements.text.value = ""; composerDrafts[state.person.person_id] = "";
-    await refreshConversation();
-    if (lookup) setTimeout(() => runRealityLookup(data.message.message_id), 60);
+    state.conversation.messages.push({ message_id: "optimistic-" + Date.now(), role: "user", text, status: "answered", answer_status: "answered" });
+    state.conversation.messages.push({ message_id: "generating-" + Date.now(), role: "assistant", text: "生成中…", status: "generating", answer_status: "generating" });
+    renderMessages();
+    try {
+      await pollJob(res.job_id);
+      await refreshConversation();
+      if (lookup) {
+        const lastAssistant = state.conversation.messages.filter(m => m.role === "assistant").pop();
+        if (lastAssistant) setTimeout(() => runRealityLookup(lastAssistant.message_id), 60);
+      }
+    } catch (err) {
+      await refreshConversation();
+      throw err;
+    }
   } catch (error) {
     status.textContent = `发送失败：${error.message} 输入内容已保留。`;
     status.hidden = false;

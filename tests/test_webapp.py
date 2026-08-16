@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
@@ -338,19 +339,24 @@ class WebAppTests(unittest.TestCase):
             {"decision": "confirmed"},
         )
         self.assertEqual((status, reviewed["source"]["review_status"]), (200, "confirmed"))
-        status, reply = self.json_request(
+        status, sent = self.json_request(
             f"/api/people/{person_id}/conversation/messages",
             "POST",
             {"text": "What matters most?", "reality_lookup_requested": False},
         )
-        self.assertEqual((status, reply["message"]["status"]), (201, "answered"))
-        self.assertEqual(
-            reply["message"]["prediction_trace"]["kernel"],
-            "simulation-v5",
-        )
-        self.assertEqual(
-            reply["message"]["prediction_trace"]["generative_content_calls"], 0
-        )
+        self.assertEqual(status, 201)
+        job_id = sent["job_id"]
+        message = None
+        for _ in range(200):
+            _, job_state = self.json_request(f"/api/jobs/{job_id}")
+            if job_state["job"]["status"] in {"succeeded", "failed"}:
+                message = job_state["job"].get("result")
+                break
+            time.sleep(0.05)
+        self.assertIsNotNone(message, "send_message 任务未完成")
+        self.assertEqual(message["status"], "answered")
+        self.assertEqual(message["prediction_trace"]["kernel"], "simulation-v5")
+        self.assertEqual(message["prediction_trace"]["generative_content_calls"], 0)
         status, summary = self.json_request(
             f"/api/people/{person_id}/conversation"
         )
