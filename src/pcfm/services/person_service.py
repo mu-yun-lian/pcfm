@@ -80,7 +80,7 @@ class PersonServiceMixin:
                     history = self._history(person_id)
                     versions = self._versions(person_id)
                     conversation = self._conversation_call(
-                        self.conversation.summary, person_id
+                        self.conversation.summary, person_id, light=True
                     )
                     messages = list(conversation["messages"])
                     result.append(

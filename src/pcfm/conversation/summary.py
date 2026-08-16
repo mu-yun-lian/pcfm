@@ -37,23 +37,21 @@ class SummaryMixin:
     def _baseline_report(
         self, person_id: str, active_version: int | None
     ) -> dict[str, object]:
+        if active_version is None:
+            return {
+                "status": "not_assessed",
+                "reason": "active_response_model_required",
+                "sample_count": 0,
+            }
         cache_key = (
             "baseline_report",
             str(person_id),
-            int(active_version) if active_version is not None else None,
+            int(active_version),
             self._baseline_files_tag(),
         )
         cached = self._report_cache.get(cache_key)
         if cached is not None:
             return copy.deepcopy(cached)
-        if active_version is None:
-            result: dict[str, object] = {
-                "status": "not_assessed",
-                "reason": "active_response_model_required",
-                "sample_count": 0,
-            }
-            self._report_cache[cache_key] = copy.deepcopy(result)
-            return result
         try:
             baseline_artifact = self._response_model(person_id, int(active_version))
         except ConversationError:
@@ -117,7 +115,7 @@ class SummaryMixin:
             self._simulation_model(person_id, active_version), holdouts
         )
 
-    def summary(self, person_id: str) -> dict[str, object]:
+    def summary(self, person_id: str, *, light: bool = False) -> dict[str, object]:
         profile = self.profile(person_id)
         sources = self._list(person_id, "conversation_sources.json")
         state = self._state(person_id)
@@ -128,13 +126,27 @@ class SummaryMixin:
         candidates = self._list(person_id, "optimization_candidates.json")
         confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
         active = state.get("active_version")
-        baseline_report = self._baseline_report(
-            person_id, int(active) if active is not None else None
-        )
-        simulation_validation = self._simulation_validation_report(
-            person_id, int(active) if active is not None else None
-        )
-        active_model = self._simulation_model(person_id, int(active)) if active else {}
+        if light:
+            baseline_report = {
+                "status": "not_assessed",
+                "reason": "list_view_light",
+                "sample_count": 0,
+            }
+            simulation_validation = {
+                "status": "not_assessed",
+                "reason": "list_view_light",
+                "sample_count": 0,
+                "accuracy_claim": "none",
+            }
+            active_model: dict[str, object] = {}
+        else:
+            baseline_report = self._baseline_report(
+                person_id, int(active) if active is not None else None
+            )
+            simulation_validation = self._simulation_validation_report(
+                person_id, int(active) if active is not None else None
+            )
+            active_model = self._simulation_model(person_id, int(active)) if active else {}
         if active:
             profile = self.profile(person_id)
         reviewed_model = dict(active_model.get("reviewed_public_model") or {})
