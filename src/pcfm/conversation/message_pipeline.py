@@ -114,80 +114,11 @@ class MessagePipelineMixin:
         generation_calls = 0
         validation_calls = 0
         if active_version is None:
-            ordinary = self._predictor.ordinary_dialogue(clean)
-            context_trace = {
-                "kernel": "conversation-shell-v1",
-                "retrieval_is_candidate_only": True,
-                "generative_content_calls": 0,
-                "context_digest": response_canonical_hash(
-                    [clean, [(item.get("message_id"), item.get("text")) for item in prior_messages[-6:]]]
-                ),
-                "context_used": {
-                    "message_ids": [str(item.get("message_id")) for item in prior_messages[-6:] if item.get("message_id")],
-                    "turn_count": len(prior_messages[-6:]),
-                    "generated_context_count": sum(item.get("context_role") == "model_generated_context" for item in prior_messages[-6:]),
-                },
-                "conversation_context": copy.deepcopy(conversation_context),
-            }
-            if ordinary:
-                _dialogue_act, ordinary_text = ordinary
-                base.update(
-                    {
-                        "status": "answered",
-                        "answer_status": "ordinary_dialogue",
-                        "applicability": "ordinary_dialogue_content_free",
-                        "confidence": 1.0,
-                        "text": ordinary_text,
-                        "neutral_content": ordinary_text,
-                        "frozen_contract": None,
-                        "frozen_contract_hash": None,
-                        "structured_prediction_hash": None,
-                        "structured_prediction": None,
-                        "prediction_trace": context_trace,
-                        "style_status": "neutral_expression",
-                        "style_gate": {"status": "ordinary_dialogue_content_free"},
-                        "evidence": [],
-                        "uncertainties": [],
-                    }
-                )
-            else:
-                assisted, generation_trace = self._compose_assisted_response(
-                    person_id=person_id,
-                    question=clean,
-                    history=prior_messages,
-                    model_ref=selected_model_ref,
-                    response_basis=None,
-                )
-                telemetry["content_generation_llm_calls"] = telemetry.get(
-                    "content_generation_llm_calls", 0
-                ) + int(generation_trace.get("model_calls", 0))
-                generation_calls = int(generation_trace.get("model_calls", 0))
-                self._save_telemetry(person_id, telemetry)
-                base.update(
-                    {
-                        "status": "answered" if assisted else "needs_model",
-                        "answer_status": "general_assisted",
-                        "applicability": "general_knowledge_not_person_prediction",
-                        "confidence": 0.0,
-                        "text": assisted
-                        or "当前没有足够的人物材料。选择一个可用对话模型后，仍可获得明确标注为通用知识、而非人物预测的正常回答。",
-                        "neutral_content": assisted or "",
-                        "frozen_contract": None,
-                        "frozen_contract_hash": None,
-                        "structured_prediction_hash": None,
-                        "structured_prediction": None,
-                        "prediction_trace": {
-                            **context_trace,
-                            "prediction_path": "general_assisted",
-                            "generation": generation_trace,
-                        },
-                        "style_status": "not_run_no_person_prediction",
-                        "style_gate": {"status": "not_run"},
-                        "evidence": [],
-                        "uncertainties": ["没有人物证据；回答不代表该人物立场"],
-                        "knowledge_source": "external_model_briefing" if assisted else "none",
-                    }
-                )
+            generation_calls = self._send_without_active_version(
+                person_id, clean, prior_messages, conversation_context,
+                selected_model_ref, base, telemetry,
+            )
+
         else:
             artifact = self._simulation_model(person_id, int(active_version))
             query_plan: dict[str, object] = {}
