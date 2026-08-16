@@ -61,6 +61,11 @@ _TOOLS = [
         "永久删除某个已归档人物(不可恢复,执行前须向用户确认)",
         {"person_id": "人物ID(必填)"},
     ),
+    (
+        "process_materials",
+        "一键处理某个人物的全部原始材料(确认来源→提取候选→确认候选,自动生成模型版本),之后即可对话",
+        {"person_id": "人物ID(必填)"},
+    ),
 ]
 
 
@@ -203,7 +208,49 @@ class AssistantEngine:
             pid = self._resolve_person(args.get("person_id"), by_name)
             self.service.permanently_delete_archived_person(pid)
             return "已永久删除。"
+        if name == "process_materials":
+            return self._process_materials(self._resolve_person(args.get("person_id"), by_name))
         return "未知工具：" + name
+
+    def _process_materials(self, pid):
+        """确认来源 → 提取候选 → 确认候选；每确认一条候选自动生成模型版本。"""
+        conv = self.service.conversation
+        confirmed_sources = 0
+        extracted = 0
+        confirmed_candidates = 0
+        # 第一遍：确认所有待审核来源
+        for s in conv.sources(pid):
+            if str(s.get("review_status")) == "pending":
+                try:
+                    self.service.review_conversation_source(pid, str(s["source_id"]), "confirmed")
+                    confirmed_sources += 1
+                except Exception:
+                    pass
+        # 第二遍：给没有候选的已确认来源提取候选
+        for s in conv.sources(pid):
+            if not s.get("llm_response_event_candidates"):
+                try:
+                    self.service.extract_conversation_response_candidates(pid, str(s["source_id"]))
+                    extracted += 1
+                except Exception:
+                    pass
+        # 第三遍：确认所有待审核候选
+        for s in conv.sources(pid):
+            for c in s.get("llm_response_event_candidates") or []:
+                if str(c.get("review_status")) == "pending":
+                    try:
+                        self.service.review_conversation_response_candidate(
+                            pid, str(s["source_id"]), str(c["candidate_id"]), "confirmed"
+                        )
+                        confirmed_candidates += 1
+                    except Exception:
+                        pass
+        if not confirmed_sources and not extracted and not confirmed_candidates:
+            return "这个人物没有待处理的材料（来源都已确认、候选也都处理完了）。"
+        return (
+            "处理完成：确认来源 %d 份、提取候选 %d 份、确认候选 %d 条。"
+            "每确认一条候选会生成一个模型版本，现在可以直接对话了。"
+        ) % (confirmed_sources, extracted, confirmed_candidates)
 
     def _resolve_person(self, ref, by_name):
         ref = str(ref or "").strip()
