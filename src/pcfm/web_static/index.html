@@ -158,7 +158,7 @@
           <label><input name="enabled" type="checkbox" checked> 启用此服务</label>
           <button class="button primary" type="submit">只保存配置</button>
         </form>
-        <div class="model-role-grid"><label>资料处理模型<select id="material-model-role"><option value="">未配置</option></select></label></div>
+        <div class="model-role-grid"><label>助手模型<select id="role-assistant"><option value="">未配置</option></select></label><label>资料处理模型<select id="role-material_processing"><option value="">未配置</option></select></label><label>候选校验模型<select id="role-validation"><option value="">未配置</option></select></label><label>人物对话模型<select id="role-dialogue"><option value="">未配置</option></select></label></div>
       </details>
     </div>
   </dialog>
@@ -230,6 +230,7 @@
         </div>
       </div>
       <div class="source-list-head"><h3>资料与审核队列</h3><span id="source-count-summary"></span><button class="mini-button confirm" id="process-all-materials" type="button">一键处理全部材料</button></div>
+      <div class="processing-progress" id="processing-progress" hidden><span id="processing-progress-text">处理中…</span><div class="progress-track"><div class="progress-fill" id="processing-progress-fill"></div></div></div>
       <div id="sources-list" class="sources-list"></div>
       <div class="optimization-section"><h3>待优化资料</h3><p>确认前不会改变当前版本；缺少独立留出资料时，升级会被拒绝。</p><div id="optimization-list"></div></div>
     </div>

@@ -29,7 +29,7 @@ SUPPORTED_PROTOCOLS = frozenset(
         "custom_compatible",
     }
 )
-ROLE_NAMES = frozenset({"dialogue", "material_processing", "validation"})
+ROLE_NAMES = frozenset({"dialogue", "material_processing", "validation", "assistant"})
 
 
 class ModelServiceError(ValueError):
@@ -181,6 +181,7 @@ class ModelServiceManager:
                     "material_processing": "",
                     "validation": "",
                     "default_dialogue": "",
+                    "assistant": "",
                 },
             )
 
@@ -330,6 +331,8 @@ class ModelServiceManager:
         raw = _read_json(self.roles_path, {})
         if not isinstance(raw, dict) or raw.get("schema_version") != MODEL_ROLE_SCHEMA:
             raise ModelServiceError("模型角色配置版本不受支持。")
+        for key in ("default_dialogue", "material_processing", "validation", "assistant"):
+            raw.setdefault(key, "")
         return dict(raw)
 
     def set_role(self, role: str, model_ref: str) -> dict[str, object]:
@@ -587,12 +590,16 @@ class ModelServiceManager:
                 "temperature": float(temperature),
                 "max_tokens": token_limit,
             }
-            # 禁用思考模式（reasoning），避免结构化输出时 reasoning 耗尽 token 导致 content 为空
-            body["thinking"] = {"type": "disabled"}
+            # 注意：不要同时传 thinking=disabled 和 response_format=json_object，
+            # 会导致模型返回纯空白 content（实测 deepseek-v4-pro 复现）。
             if structured and bool(dict(item["capabilities"]).get("structured_output")):
                 body["response_format"] = {"type": "json_object"}
-            payload = self._json_request(item, "/chat/completions", method="POST", body=body)
-            text = str(payload["choices"][0]["message"]["content"])
+            text = ""
+            for _attempt in range(3):
+                payload = self._json_request(item, "/chat/completions", method="POST", body=body)
+                text = str(payload["choices"][0]["message"]["content"])
+                if text.strip():
+                    break
         elif protocol == "ollama":
             payload = self._json_request(
                 item,

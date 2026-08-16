@@ -44,6 +44,26 @@ function busy(button, on, label = "处理中…") {
   else { button.textContent = button.dataset.old || button.textContent; button.disabled = false; }
 }
 
+let composerGeneration = 0;
+const composerDrafts = {};
+function saveDraft() {
+  if (!state.person?.person_id) return;
+  const ta = $("#message-form textarea");
+  if (ta) composerDrafts[state.person.person_id] = ta.value;
+}
+function resetComposer(nextId) {
+  composerGeneration++;
+  const button = $("#message-form .send-button");
+  if (button) { button.disabled = false; button.textContent = "发送"; delete button.dataset.old; }
+  const ta = $("#message-form textarea");
+  if (ta) ta.value = (nextId && composerDrafts[nextId]) || "";
+  const status = $("#composer-status");
+  if (status) status.hidden = true;
+  const lookup = $("#message-form [name=reality_lookup]");
+  if (lookup) lookup.checked = false;
+  if (typeof stopProgressPolling === "function") stopProgressPolling();
+}
+
 function personById(id) { return state.people.find(item => item.person_id === id); }
 function currentName() { return state.person?.name || personById(state.person?.person_id)?.name || "当前人物"; }
 function shortTime(value) { try { return new Date(value).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}); } catch { return ""; } }
@@ -119,7 +139,8 @@ function renderModelServices() {
     }).join("") : '<p class="people-empty">尚无模型列表。请先刷新列表，或在下方配置中填写模型 ID。</p>';
     return `<article class="model-service-item"><header><strong>${escapeHtml(service.display_name)}</strong><span>${escapeHtml(status)}</span></header><p>${escapeHtml(service.protocol)} · ${escapeHtml(service.base_url)} · 密钥：${service.api_key_configured ? "已配置" : "未配置"}</p>${service.last_error ? `<p class="warning-box">${escapeHtml(service.last_error)}</p>` : ""}<div class="model-choice-list">${models}</div><div class="model-service-actions"><button type="button" data-refresh-service="${service.service_id}">刷新模型列表</button><button type="button" data-edit-service="${service.service_id}">编辑配置</button><button type="button" data-delete-service="${service.service_id}">删除</button></div></article>`;
   }).join("") : '<p class="people-empty">尚未配置模型服务。没有模型时仍可检索人物历史事件和公开倾向；需要通用知识时会明确提示选择模型。</p>';
-  $("#material-model-role").innerHTML = roleOptions(state.modelServices.roles.material_processing || "");
+  const roleMap = [["assistant", "#role-assistant", "assistant"], ["material_processing", "#role-material_processing", "material_processing"], ["validation", "#role-validation", "validation"], ["dialogue", "#role-dialogue", "default_dialogue"]];
+  for (const [label, sel, key] of roleMap) { const el = $(sel); if (el) el.innerHTML = roleOptions(state.modelServices.roles[key] || ""); }
   $$('[data-select-model-ref]').forEach(button => button.onclick = async () => {
     if (!state.person) return toast("请先选择一个人物。", true);
     const ref = button.dataset.selectModelRef;
@@ -171,7 +192,7 @@ async function submitModelService(event) {
     form.reset(); form.elements.timeout_seconds.value="30"; form.elements.enabled.checked=true; form.elements.structured_output.checked=true; $("#model-preset-select").value="";
     await loadModelServices();
     toast("已保存，正在自动读取模型并验证…");
-    await autoVerifyService(String(data.service_id));
+    await autoVerifyService(String(data.service?.service_id));
   }
   catch(error){toast(error.message,true);}
   finally { busy(submitBtn, false); }
@@ -278,6 +299,7 @@ function showEmptyWorkspace() {
 }
 
 async function selectPerson(personId) {
+  saveDraft();
   const [personData, conversationData] = await Promise.all([
     api(`/api/people/${encodeURIComponent(personId)}`),
     api(`/api/people/${encodeURIComponent(personId)}/conversation`),
@@ -285,17 +307,18 @@ async function selectPerson(personId) {
   state.person = personData.person;
   state.conversation = conversationData.conversation;
   state.comparison = null;
-  closeDrawer(); renderPeople(); renderWorkspace(); await loadSessions();
+  resetComposer(personId); closeDrawer(); renderPeople(); renderWorkspace(); await loadSessions();
 }
 
 function isAssistant() { return state.person?.person_id === "assistant"; }
 
 async function selectAssistant() {
+  saveDraft();
   const data = await api("/api/assistant/conversation");
   state.person = { person_id: "assistant", name: "AI 助手", avatar: "/default-person-avatar.png" };
   state.conversation = data.conversation;
   state.comparison = null;
-  closeDrawer(); renderPeople(); renderWorkspace();
+  resetComposer("assistant"); closeDrawer(); renderPeople(); renderWorkspace();
   if (!state.conversation.messages.length) {
     state.conversation.messages = [{ message_id: "assistant-greeting", role: "assistant", text: "我是 AI 助手，帮你操作这个系统。\n· 建人物\n· 加材料\n· 搜索\n· 归档 / 恢复 / 永久删除\n· 列出人物 / 归档列表", status: "answered", answer_status: "assistant" }];
   }
@@ -454,17 +477,18 @@ async function sendMessage(event) {
   const lookup = form.elements.reality_lookup.checked;
   const status = $("#composer-status");
   status.hidden = true;
+  const gen = composerGeneration;
   busy(button, true, "生成中…");
   try {
     if (isAssistant()) {
       await api("/api/assistant/message", {method:"POST", body: JSON.stringify({text})});
-      form.elements.text.value = "";
+      form.elements.text.value = ""; composerDrafts[state.person.person_id] = "";
       await refreshAssistant();
       await loadPeople();
       return;
     }
     const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/messages`, {method:"POST",body:JSON.stringify({text,reality_lookup_requested:lookup,dialogue_model_ref:state.conversation.dialogue_model_ref || ""})});
-    form.elements.text.value = "";
+    form.elements.text.value = ""; composerDrafts[state.person.person_id] = "";
     await refreshConversation();
     if (lookup) setTimeout(() => runRealityLookup(data.message.message_id), 60);
   } catch (error) {
@@ -472,7 +496,7 @@ async function sendMessage(event) {
     status.hidden = false;
     toast(error.message, true);
   }
-  finally { busy(button, false); }
+  finally { if (gen === composerGeneration) busy(button, false); }
 }
 
 async function startNewConversation(button) {
@@ -548,10 +572,42 @@ async function reviewSource(sourceId, decision, button) {
   finally { busy(button, false); }
 }
 
+let progressTimer = null;
+function startProgressPolling() {
+  stopProgressPolling();
+  const el = $("#processing-progress");
+  if (!el || !state.person) return;
+  el.hidden = false;
+  const tick = async () => {
+    try {
+      const data = await api(`/api/people/${encodeURIComponent(state.person.person_id)}/processing-progress`);
+      const p = data.progress || {};
+      const text = $("#processing-progress-text");
+      const fill = $("#processing-progress-fill");
+      if (p.active) {
+        const total = p.total_chunks || 1;
+        fill.style.width = Math.round((p.chunk || 0) / total * 100) + "%";
+        text.textContent = `正在处理「${p.title || ""}」第 ${p.chunk || 0}/${total} 块…`;
+      } else if (p.status === "done") {
+        fill.style.width = "100%";
+        text.textContent = "处理完成";
+      }
+    } catch (e) { /* 轮询失败忽略 */ }
+  };
+  tick();
+  progressTimer = setInterval(tick, 1200);
+}
+function stopProgressPolling() {
+  if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+  const el = $("#processing-progress");
+  if (el) { el.hidden = true; const fill = $("#processing-progress-fill"); if (fill) fill.style.width = "0%"; }
+}
+
 async function processAllMaterials() {
   if (!state.person) return;
   const button = $("#process-all-materials");
   busy(button, true, "处理中…");
+  startProgressPolling();
   const base = `/api/people/${encodeURIComponent(state.person.person_id)}/conversation/sources`;
   try {
     for (const source of state.conversation.sources) {
@@ -578,7 +634,7 @@ async function processAllMaterials() {
     await refreshConversation();
     toast(confirmed ? `处理完成：确认 ${confirmed} 条候选，已形成新人物版本。` : "处理完成：没有待确认的候选。");
   } catch (error) { toast(error.message, true); }
-  finally { busy(button, false); }
+  finally { stopProgressPolling(); busy(button, false); }
 }
 
 async function reviewOptimization(candidateId, decision, button) {
@@ -985,7 +1041,7 @@ function wire() {
   $("#model-preset-select").onchange=event=>applyPreset(event.target.value);
   $("#add-provider").onclick=()=>{ const form=$("#model-service-form"); form.closest("details").open=true; form.reset(); form.elements.service_id.value=""; form.elements.timeout_seconds.value="30"; form.elements.enabled.checked=true; form.elements.structured_output.checked=true; form.elements.api_key.type="password"; form.elements.api_key.placeholder="粘贴 API Key"; $("#key-eye").textContent="👁"; form.querySelector("h3").textContent="添加供应商"; form.elements.display_name.focus(); form.scrollIntoView({behavior:"smooth",block:"center"}); };
   $("#key-eye").onclick=toggleKeyVisibility;
-  $("#material-model-role").onchange=event=>setModelRole("material_processing",event.target.value);
+  $("#role-assistant").onchange=event=>setModelRole("assistant",event.target.value); $("#role-material_processing").onchange=event=>setModelRole("material_processing",event.target.value); $("#role-validation").onchange=event=>setModelRole("validation",event.target.value); $("#role-dialogue").onchange=event=>setModelRole("dialogue",event.target.value);
   $("#close-drawer").onclick=closeDrawer;
   $$('[data-close]').forEach(button=>button.onclick=()=>$("#"+button.dataset.close).close());
   $("#person-form").onsubmit=submitPerson; $("#paste-source-form").onsubmit=submitTextSource; $("#avatar-upload-btn").onclick=()=>$("#avatar-file-input").click(); $("#avatar-file-input").onchange=e=>e.target.files[0]&&uploadAvatar(e.target.files[0]); $("#avatar-remove-btn").onclick=removeAvatar; const az=$("#avatar-drop-zone"); az.ondragover=e=>{e.preventDefault();az.classList.add("dragover")}; az.ondragleave=()=>az.classList.remove("dragover"); az.ondrop=e=>{e.preventDefault();az.classList.remove("dragover");const f=e.dataTransfer.files[0];f&&uploadAvatar(f)}; $("#file-source-form").onsubmit=submitFileSource; $("#url-source-form").onsubmit=submitUrlSource;

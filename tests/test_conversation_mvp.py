@@ -658,6 +658,18 @@ startxref
         )
         self.assertTrue(ok)
 
+    def test_web_url_charset_detection_avoids_mojibake(self) -> None:
+        from pcfm.conversation_mvp import _decode_web_bytes
+
+        text = "乔布斯在斯坦福大学的演讲"
+        self.assertEqual(
+            _decode_web_bytes(text.encode("gbk"), "text/html; charset=gb2312"), text
+        )
+        body = '<html><head><meta charset="gb2312"></head><body>%s</body></html>' % text
+        self.assertEqual(_decode_web_bytes(body.encode("gbk"), "text/html"), body)
+        utf8 = "hello 世界"
+        self.assertEqual(_decode_web_bytes(utf8.encode("utf-8"), "text/html"), utf8)
+
 
 if __name__ == "__main__":
     unittest.main()

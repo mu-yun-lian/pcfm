@@ -51,6 +51,14 @@ _TOOLS = [
         },
     ),
     (
+        "add_url_source",
+        "抓取一个网页链接的正文作为候选材料(仅静态网页;SPA/反爬页可能抓不到)",
+        {
+            "person_id": "人物ID(必填,先用 list_people 获取)",
+            "url": "网页链接(必填,http/https)",
+        },
+    ),
+    (
         "search_person",
         "联网搜索某个人物的公开资料(结果只进候选)",
         {"person_id": "人物ID(必填)"},
@@ -78,6 +86,31 @@ _TOOLS = [
         {"person_id": "人物ID(必填)"},
     ),
 ]
+
+
+def _parse_json_prefix(text: str) -> object:
+    """解析模型返回文本里的第一个 JSON 对象,容忍尾随内容与 markdown 围栏。"""
+    value = str(text).strip()
+    if value.startswith("```"):
+        newline = value.find("\n")
+        if newline != -1:
+            value = value[newline + 1:]
+        if value.rstrip().endswith("```"):
+            value = value.rstrip()[:-3]
+        value = value.strip()
+    decoder = json.JSONDecoder()
+    try:
+        decoded, _ = decoder.raw_decode(value)
+        return decoded
+    except json.JSONDecodeError:
+        # 截断兜底:先补未闭合的引号,再补未闭合的括号
+        fixed = value.rstrip()
+        if fixed.count('"') % 2:
+            fixed += '"'
+        fixed += "}" * max(0, fixed.count("{") - fixed.count("}"))
+        fixed += "]" * max(0, fixed.count("[") - fixed.count("]"))
+        decoded, _ = decoder.raw_decode(fixed)
+        return decoded
 
 
 class AssistantEngine:
@@ -142,7 +175,7 @@ class AssistantEngine:
         if configured:
             return configured
         roles = self.service.model_services.roles() if self.service.model_services else {}
-        return str(roles.get("default_dialogue", ""))
+        return str(roles.get("assistant", "") or roles.get("default_dialogue", ""))
 
     def _tools_text(self):
         lines = []
@@ -174,11 +207,20 @@ class AssistantEngine:
                 for i, p in enumerate(archived, 1)
             )
         if name == "create_person":
+            wanted = str(args.get("name") or "").strip()
+            if not wanted:
+                return "请提供人物姓名。"
+            for existing in self.service.list_people():
+                if str(existing.get("name", "")).strip().casefold() == wanted.casefold():
+                    return (
+                        "人物「%s」已经存在（ID=%s），不重复创建。"
+                        "请直接使用这个 ID 继续操作。"
+                    ) % (existing["name"], existing["person_id"])
             aliases = args.get("aliases") or []
             if isinstance(aliases, str):
                 aliases = [a.strip() for a in aliases.replace("，", ",").split(",") if a.strip()]
             person = self.service.create_conversation_person(
-                name=str(args["name"]),
+                name=wanted,
                 aliases=[str(a) for a in aliases],
                 language=str(args.get("language") or "zh"),
                 description=str(args.get("identity_note") or ""),
@@ -186,7 +228,10 @@ class AssistantEngine:
                 identity_note=str(args.get("identity_note") or ""),
                 focus_domain=str(args.get("focus_domain") or ""),
             )
-            return "已创建人物「%s」，ID=%s" % (person["name"], person["person_id"])
+            return (
+                "已创建人物「%s」（ID=%s）。请把这个 ID 原样转告用户，不要改写。"
+                % (person["name"], person["person_id"])
+            )
         if name == "add_text_source":
             pid = self._resolve_person(args.get("person_id"), by_name)
             self.service.add_conversation_text_source(
@@ -198,6 +243,22 @@ class AssistantEngine:
                 dataset_role="model_source",
             )
             return "已添加文本材料。现在只是候选，需在人物资料里审核确认。"
+        if name == "add_url_source":
+            pid = self._resolve_person(args.get("person_id"), by_name)
+            try:
+                self.service.add_conversation_url_source(
+                    pid,
+                    url=str(args["url"]),
+                    speaker="",
+                    source_date="",
+                    dataset_role="reference_only",
+                    content_authenticity="unverified_material",
+                    source_locator="user_provided_url",
+                    source_context="用户提供链接抓取的原文;尚未确认说话人。",
+                )
+            except Exception as error:
+                return "抓取失败:%s" % str(error)
+            return "已抓取该网页正文并保存为候选(未核实说话人)。若页面是 SPA/反爬页可能只抓到空壳,请改为粘贴正文文本。"
         if name == "search_person":
             pid = self._resolve_person(args.get("person_id"), by_name)
             if self.service.public_search is None:
@@ -348,22 +409,30 @@ class AssistantEngine:
         confirmed_sources = 0
         extracted = 0
         confirmed_candidates = 0
+        failures = []
         # 第一遍：确认所有待审核来源
         for s in conv.sources(pid):
             if str(s.get("review_status")) == "pending":
                 try:
                     self.service.review_conversation_source(pid, str(s["source_id"]), "confirmed")
                     confirmed_sources += 1
-                except Exception:
-                    pass
+                except Exception as error:
+                    failures.append("确认来源「%s」失败：%s" % (str(s.get("title") or s["source_id"]), error))
         # 第二遍：给没有候选的已确认来源提取候选
         for s in conv.sources(pid):
             if not s.get("llm_response_event_candidates"):
                 try:
                     self.service.extract_conversation_response_candidates(pid, str(s["source_id"]))
                     extracted += 1
-                except Exception:
-                    pass
+                except Exception as error:
+                    failures.append("提取「%s」候选失败：%s" % (str(s.get("title") or s["source_id"]), error))
+        # 提取后复查：已确认但仍无候选的来源要如实说明
+        for s in conv.sources(pid):
+            if str(s.get("review_status")) == "confirmed" and not s.get("llm_response_event_candidates"):
+                failures.append(
+                    "材料「%s」已确认但没提取出任何候选（内容太短、没有可定位原话，或模型没返回事件）。"
+                    % (str(s.get("title") or s["source_id"]))
+                )
         # 第三遍：确认所有待审核候选
         for s in conv.sources(pid):
             for c in s.get("llm_response_event_candidates") or []:
@@ -373,14 +442,19 @@ class AssistantEngine:
                             pid, str(s["source_id"]), str(c["candidate_id"]), "confirmed"
                         )
                         confirmed_candidates += 1
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        failures.append("确认候选「%s」失败：%s" % (str(c.get("candidate_id")), error))
         if not confirmed_sources and not extracted and not confirmed_candidates:
+            if failures:
+                return "处理没有产出：\n" + "\n".join("· " + f for f in failures)
             return "这个人物没有待处理的材料（来源都已确认、候选也都处理完了）。"
-        return (
+        summary = (
             "处理完成：确认来源 %d 份、提取候选 %d 份、确认候选 %d 条。"
             "每确认一条候选会生成一个模型版本，现在可以直接对话了。"
         ) % (confirmed_sources, extracted, confirmed_candidates)
+        if failures:
+            summary += "\n有 %d 处问题：\n" % len(failures) + "\n".join("· " + f for f in failures)
+        return summary
 
     def _resolve_person(self, ref, by_name):
         ref = str(ref or "").strip()
@@ -399,6 +473,7 @@ class AssistantEngine:
             messages,
             structured=True,
             temperature=0.2,
+            max_tokens=8192,
         )
 
     def handle(self, text):
@@ -419,7 +494,7 @@ class AssistantEngine:
         for _ in range(MAX_TOOL_ITER):
             try:
                 response = self._call_model(model_ref, messages)
-                parsed = json.loads(response["text"])
+                parsed = _parse_json_prefix(response["text"])
             except (ModelServiceError, json.JSONDecodeError) as error:
                 reply = "助手调用大模型失败：" + str(error)
                 break

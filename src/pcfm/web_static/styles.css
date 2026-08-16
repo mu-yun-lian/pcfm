@@ -372,4 +372,8 @@ dialog.wide-dialog{width:min(1120px,calc(100vw - 36px))}
 .key-wrap{position:relative;display:flex;align-items:center}
 .key-wrap input{padding-right:34px}
 .key-eye{position:absolute;right:6px;border:none;background:transparent;cursor:pointer;font-size:15px;padding:2px}
+.processing-progress{margin:8px 0;padding:8px 10px;border:1px solid #e3e6e8;border-radius:8px;background:#f7f9fa}
+.processing-progress span{display:block;font-size:12px;color:#2a2e33;margin-bottom:6px}
+.progress-track{height:6px;border-radius:4px;background:#e6e9ec;overflow:hidden}
+.progress-fill{height:100%;width:0%;background:#1d7a4f;border-radius:4px;transition:width .3s ease}
 

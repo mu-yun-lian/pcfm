@@ -123,6 +123,13 @@ def create_handler(service: ProductService):
                     )
                     return
                 if (
+                    len(parts) == 4
+                    and parts[:2] == ["api", "people"]
+                    and parts[3] == "processing-progress"
+                ):
+                    self._send_json({"ok": True, "progress": service.processing_progress(parts[2])})
+                    return
+                if (
                     len(parts) == 5
                     and parts[:2] == ["api", "people"]
                     and parts[3:5] == ["conversation", "sessions"]

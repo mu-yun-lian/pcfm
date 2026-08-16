@@ -309,6 +309,10 @@ class ProductService:
     def model_service_state(self) -> dict[str, object]:
         return self.model_services.public_state()
 
+    def processing_progress(self, person_id: str) -> dict[str, object]:
+        self._require_person(person_id)
+        return self.conversation.processing_progress(person_id)
+
     def save_model_service(self, payload: Mapping[str, object]) -> dict[str, object]:
         try:
             return self.model_services.save_service(payload)

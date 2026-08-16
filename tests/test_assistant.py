@@ -42,6 +42,43 @@ class AssistantToolTests(unittest.TestCase):
         self.assertIn("已恢复", result)
         self.assertIn(pid, [p["person_id"] for p in self.service.list_people()])
 
+    def test_add_url_source_tool(self) -> None:
+        from unittest.mock import patch
+
+        person = self.service.create_conversation_person(name="乔布斯", aliases=[], language="zh")
+        pid = str(person["person_id"])
+        with patch.object(
+            self.service, "add_conversation_url_source", return_value={"source_id": "s1"}
+        ) as mocked:
+            result = self.assistant._execute_tool(
+                "add_url_source",
+                {"person_id": pid, "url": "https://example.com/jobs-speech"},
+            )
+        self.assertIn("已抓取", result)
+        mocked.assert_called_once()
+        kwargs = mocked.call_args.kwargs
+        self.assertEqual(kwargs["url"], "https://example.com/jobs-speech")
+        self.assertEqual(kwargs["dataset_role"], "reference_only")
+        self.assertEqual(kwargs["content_authenticity"], "unverified_material")
+        self.assertEqual(kwargs["source_locator"], "user_provided_url")
+
+    def test_parse_json_prefix_tolerates_trailing_data(self) -> None:
+        from pcfm.assistant import _parse_json_prefix
+
+        # 模型返回合法 JSON 后又跟了额外内容(Extra data) → 只取第一个 JSON 对象
+        parsed = _parse_json_prefix('{"reply": "ok", "tool_calls": []} trailing junk')
+        self.assertEqual(parsed["reply"], "ok")
+        # markdown 代码围栏
+        fenced = _parse_json_prefix('```json\n{"reply": "hi"}\n```')
+        self.assertEqual(fenced["reply"], "hi")
+
+    def test_create_person_dedupes_existing_name(self) -> None:
+        self.assistant._execute_tool("create_person", {"name": "特朗普"})
+        result = self.assistant._execute_tool("create_person", {"name": "特朗普"})
+        self.assertIn("已经存在", result)
+        names = [p["name"] for p in self.service.list_people()]
+        self.assertEqual(names.count("特朗普"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
