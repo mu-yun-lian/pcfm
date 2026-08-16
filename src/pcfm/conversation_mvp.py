@@ -21,8 +21,10 @@ from urllib.request import Request, urlopen
 
 from .expression_renderer import (
     ExpressionRenderer,
+    ExpressionRendererError,
     SAFE_SURFACE_CONNECTORS,
     builtin_expression_profile_path,
+    render_person_surface_style,
 )
 from .response_prediction import (
     EVALUATION_TENDENCY_TYPES,
@@ -2391,6 +2393,100 @@ class ConversationWorkbench:
     @staticmethod
     def _protected_numbers(text: str) -> list[str]:
         return sorted(set(re.findall(r"\b\d+(?:[.,]\d+)*(?:-%|%)?|\b\d{4}-\d{2}-\d{2}\b", text)))
+
+    def _render_reply(
+        self, person_id: str, contract: Mapping[str, object]
+    ) -> tuple[str, str, dict[str, object]]:
+        profile = self.profile(person_id)
+        neutral = "\n".join(
+            str(item["text"])
+            for field in ("claims", "reasons", "memories", "uncertainties")
+            for item in contract[field]
+        )
+        configured_renderer = self._renderers.get(str(profile["style_profile_id"]))
+        if configured_renderer is not None and not isinstance(
+            configured_renderer, ExpressionRenderer
+        ):
+            try:
+                probe = configured_renderer.render(contract)
+                selected = dict(probe.get("selected", {}))
+            except Exception:
+                selected = {"status": "rejected"}
+            if selected.get("status") != "passed":
+                return neutral, "neutral_fallback", {
+                    "status": "failed_returned_neutral",
+                    "selected_intensity": "neutral",
+                }
+        state = self._state(person_id)
+        active_version = state.get("active_version")
+        active_record = next(
+            (
+                item
+                for item in self._list(person_id, "conversation_versions.json")
+                if active_version is not None
+                and int(item.get("version", -1)) == int(active_version)
+            ),
+            None,
+        )
+        style_path = (
+            self._person_dir(person_id) / str(active_record["style_artifact_path"])
+            if active_record and active_record.get("style_artifact_path")
+            else None
+        )
+        if style_path is not None and style_path.exists():
+            style_artifact = _read_json(style_path, {})
+            if isinstance(style_artifact, Mapping):
+                try:
+                    result = render_person_surface_style(contract, style_artifact)
+                except Exception as error:
+                    result = {
+                        "status": "rejected",
+                        "changed": False,
+                        "reasons": [f"semantic_gate_error:{type(error).__name__}"],
+                        "checks": {},
+                        "used_rules": [],
+                    }
+                common_gate = {
+                    "status": result.get("status"),
+                    "changed": bool(result.get("changed", False)),
+                    "selected_intensity": "observed_surface_only",
+                    "style_artifact_hash": style_artifact.get("artifact_hash"),
+                    "style_profile_status": result.get("profile_status"),
+                    "checks": result.get("checks", {}),
+                    "reasons": result.get("reasons", []),
+                    "used_rules": result.get("used_rules", []),
+                }
+                if result.get("status") == "passed" and result.get("changed"):
+                    return str(result["text"]), "person_style_applied", common_gate
+                if result.get("status") == "neutral":
+                    return neutral, "neutral_expression", common_gate
+                return neutral, "neutral_fallback", {
+                    **common_gate,
+                    "status": "failed_returned_neutral",
+                    "selected_intensity": "neutral",
+                }
+        renderer = self._renderers.get(str(profile["style_profile_id"]))
+        if renderer is None:
+            return neutral, "neutral_no_validated_profile", {
+                "status": "not_run_neutral_profile", "selected_intensity": "neutral"
+            }
+        try:
+            result = renderer.render(contract)
+        except (ExpressionRendererError, Exception):
+            return neutral, "neutral_fallback", {
+                "status": "failed_returned_neutral",
+                "selected_intensity": "neutral",
+            }
+        selected = dict(result.get("selected", {}))
+        if selected.get("status") != "passed":
+            return str(result.get("neutral_text", neutral)), "neutral_fallback", {
+                "status": "failed_returned_neutral",
+                "selected_intensity": "neutral",
+            }
+        return str(selected.get("text", neutral)), "styled_semantic_gate_passed", {
+            "status": str(result.get("semantic_preservation", {}).get("status", "passed")),
+            "selected_intensity": selected.get("intensity", "neutral"),
+        }
 
     def _model_semantic_query_plan(
         self,

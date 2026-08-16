@@ -28,6 +28,9 @@ env/
 /tmp/
 /tmp-*.py
 
+# ---- 已隔离的研究阶段旧代码(不再上传) ----
+/legacy/
+
 # ---- 系统 / 编辑器 ----
 .DS_Store
 Thumbs.db
