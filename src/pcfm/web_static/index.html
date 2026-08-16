@@ -131,24 +131,23 @@
   <dialog id="model-services-dialog" class="wide-dialog">
     <div class="dialog-card">
       <div class="dialog-head"><div><p class="kicker">每个人物独立选择</p><h2>选择对话模型</h2></div><button type="button" class="close-button" data-close="model-services-dialog">关闭</button></div>
-      <p class="plain-notice">主流模型已预配好地址与协议，你只需粘贴专属 API Key；Key 只存在本机服务端，页面不读回，已配置时以隐藏形式显示。</p>
-      <h3 class="section-title">一键接入主流模型</h3>
-      <div id="quick-providers" class="provider-grid"></div>
+      <p class="plain-notice">只有通过真实对话调用验证的模型才可选择。添加供应商时选择类型即可自动填好地址与协议，只需填 API Key。</p>
       <div class="model-current-row">
         <span id="current-dialogue-model-status">当前人物：未选择对话模型</span>
         <button id="clear-dialogue-model" class="button quiet" type="button">本人物不使用对话模型</button>
       </div>
+      <div class="provider-list-head"><button class="button secondary" id="add-provider" type="button">＋ 添加供应商</button></div>
       <div id="model-services-list" class="source-list"></div>
       <details class="model-settings">
         <summary>配置模型服务</summary>
-        <p>保存配置不会产生模型费用；“验证并使用”会发送一次最多 128 token 的小请求，成功后立即用于当前人物。API Key 只保存在本机服务端，页面不会读回。</p>
+        <p>选择预设类型会自动填好地址与协议，只需填 API Key；Key 只存在本机服务端，点眼睛可查看。</p>
         <form id="model-service-form" class="source-form">
           <h3>添加或编辑服务</h3>
           <input type="hidden" name="service_id">
           <label>选择预设服务（只填地址，不预设可能过期的模型 ID）<select id="model-preset-select"><option value="">— 手动配置 —</option></select></label>
           <div class="two-cols"><label>显示名称<input name="display_name" required placeholder="例如：本地 LM Studio"></label><label>协议<select name="protocol"><option value="openai_native">OpenAI 原生</option><option value="openai_compatible">OpenAI 兼容</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="ollama">Ollama 本地</option><option value="custom_compatible">自定义兼容</option></select></label></div>
           <div class="two-cols"><label>供应商<input name="provider" placeholder="DeepSeek / Qwen / OpenRouter"></label><label>Base URL<input name="base_url" type="url" placeholder="留空将按协议自动填充"></label></div>
-          <div class="two-cols"><label>API Key（保存后不再显示）<input name="api_key" type="password" autocomplete="new-password"></label><label>环境变量名（可选）<input name="environment_key" placeholder="OPENAI_API_KEY"></label></div>
+          <div class="two-cols"><label>API Key<span class="key-wrap"><input name="api_key" type="password" autocomplete="new-password" placeholder="粘贴 API Key"><button type="button" class="key-eye" id="key-eye" title="显示/隐藏" aria-label="显示或隐藏 API Key">👁</button></span></label><label>环境变量名（可选）<input name="environment_key" placeholder="OPENAI_API_KEY"></label></div>
           <div class="two-cols"><label>手动模型 ID（选填，逗号分隔）<input name="models" placeholder="留空则验证时自动读取"></label><label>超时秒数<input name="timeout_seconds" type="number" min="2" max="300" value="30"></label></div>
           <label><input name="structured_output" type="checkbox" checked> 模型支持严格 JSON 输出</label>
           <label><input name="enabled" type="checkbox" checked> 启用此服务</label>

@@ -360,15 +360,9 @@ dialog.wide-dialog{width:min(1120px,calc(100vw - 36px))}
 /* AI 助手 */
 .assistant-emoji{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin-right:10px;border-radius:50%;background:linear-gradient(135deg,#e7f0ec,#d8e8e0);font-size:18px;flex:none}
 
-/* 模型一键接入 */
-.section-title{margin:18px 0 10px;font-size:14px}
-.provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:18px}
-.provider-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff}
-.provider-card.configured{border-color:var(--forest);background:#f4faf7}
-.provider-head{display:flex;align-items:center;gap:8px}
-.provider-emoji{font-size:18px}
-.provider-head strong{flex:1;font-size:14px}
-.provider-status{font-size:11px;padding:2px 7px;border-radius:999px;color:var(--muted);background:#f1f2f0}
-.provider-card.configured .provider-status{color:#2e6b4f;background:#e2f0e8}
-.provider-key{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px}
-.provider-save{width:100%;font-size:13px}
+/* 供应商列表 + API Key 眼睛 */
+.provider-list-head{display:flex;justify-content:flex-end;margin:10px 0}
+.key-wrap{position:relative;display:flex;align-items:center}
+.key-wrap input{padding-right:34px}
+.key-eye{position:absolute;right:6px;border:none;background:transparent;cursor:pointer;font-size:15px;padding:2px}
+

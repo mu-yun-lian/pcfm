@@ -321,6 +321,11 @@ class ModelServiceManager:
             return os.environ.get(env_name, "")
         return self.secret_store.get(str(item["secret_ref"]))
 
+    def reveal_api_key(self, service_id: str) -> str:
+        """返回解密后的密钥（仅本地应用按需显示，页面默认隐藏）。"""
+        item = self._private(service_id)
+        return self._api_key(item)
+
     def roles(self) -> dict[str, object]:
         raw = _read_json(self.roles_path, {})
         if not isinstance(raw, dict) or raw.get("schema_version") != MODEL_ROLE_SCHEMA:

@@ -318,6 +318,12 @@ class ProductService:
         except ModelServiceError as error:
             raise ProductError(str(error)) from error
 
+    def reveal_model_service_key(self, service_id: str) -> str:
+        try:
+            return self.model_services.reveal_api_key(service_id)
+        except ModelServiceError as error:
+            raise ProductError(str(error)) from error
+
     def test_model_service(
         self, service_id: str, model_id: str = ""
     ) -> dict[str, object]:

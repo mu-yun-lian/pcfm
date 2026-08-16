@@ -92,64 +92,11 @@ async function loadModelServices() {
   const data = await api("/api/model-services");
   state.modelServices = data.model_services;
   renderModelServices();
-  renderQuickProviders();
   if (state.conversation) $("#open-model-picker").textContent = currentModelLabel();
 }
 
 function roleOptions(selected) {
   return `<option value="">未配置</option>${enabledModelOptions().filter(item => item.ready).map(item => `<option value="${escapeHtml(item.ref)}" ${item.ref===selected?"selected":""}>${escapeHtml(item.label)}</option>`).join("")}`;
-}
-
-const PROVIDER_EMOJI = {deepseek:"🐳", openai:"🟢", anthropic:"🟠", gemini:"✨", kimi:"🌙", qwen:"☁️", glm:"🤖", ollama:"🦙"};
-function providerServices() {
-  const map = {};
-  for (const service of state.modelServices.services) map[(service.provider || "").toLowerCase()] = service;
-  return map;
-}
-function renderQuickProviders() {
-  const grid = $("#quick-providers");
-  if (!grid) return;
-  const services = providerServices();
-  grid.innerHTML = MODEL_PRESETS.map(preset => {
-    const service = services[preset.provider.toLowerCase()];
-    const configured = !!service;
-    const keyConfigured = !!service?.api_key_configured;
-    const placeholder = preset.protocol === "ollama" ? "无需 API Key" : (keyConfigured ? "已配置（留空保留）" : "粘贴专属 API Key");
-    const status = configured ? (keyConfigured ? "已配置" : "已配置(环境变量)") : "未配置";
-    return `<div class="provider-card ${configured ? "configured" : ""}" data-provider-key="${escapeHtml(preset.key)}">
-      <div class="provider-head"><span class="provider-emoji">${PROVIDER_EMOJI[preset.key] || "🔌"}</span><strong>${escapeHtml(preset.label)}</strong><span class="provider-status">${status}</span></div>
-      <input type="password" class="provider-key" placeholder="${placeholder}" autocomplete="off">
-      <button type="button" class="button primary provider-save" data-provider-save="${escapeHtml(preset.key)}">保存</button>
-    </div>`;
-  }).join("");
-  $$("[data-provider-save]").forEach(button => button.onclick = () => savePresetProvider(button.dataset.providerSave));
-}
-async function savePresetProvider(presetKey) {
-  const preset = MODEL_PRESETS.find(item => item.key === presetKey);
-  if (!preset) return;
-  const card = document.querySelector(`[data-provider-key="${CSS.escape(presetKey)}"]`);
-  const apiKey = card.querySelector(".provider-key").value.trim();
-  const existing = providerServices()[preset.provider.toLowerCase()];
-  if (preset.protocol !== "ollama" && !apiKey && !existing?.api_key_configured) { toast("请粘贴专属 API Key。", true); return; }
-  const button = card.querySelector(".provider-save");
-  busy(button, true, "保存中…");
-  try {
-    await api("/api/model-services", {method:"POST", body: JSON.stringify({
-      service_id: existing?.service_id || "",
-      display_name: preset.display_name,
-      protocol: preset.protocol,
-      provider: preset.provider,
-      base_url: preset.base_url,
-      api_key: apiKey,
-      models: [], enabled_models: [],
-      timeout_seconds: 30,
-      capabilities: {structured_output: true},
-      enabled: true,
-    })});
-    await loadModelServices();
-    toast("已保存。点击下方「刷新模型列表」读取模型，再「验证并使用」。");
-  } catch (error) { toast(error.message, true); }
-  finally { busy(button, false); }
 }
 
 function renderModelServices() {
@@ -268,6 +215,26 @@ function applyPreset(presetKey) {
     form.elements.api_key.placeholder = "粘贴 API Key（保存后不再显示）";
   }
   if (preset.hint) toast(preset.hint);
+}
+
+async function toggleKeyVisibility() {
+  const input = $("#model-service-form [name=api_key]");
+  const serviceId = $("#model-service-form [name=service_id]").value;
+  const eye = $("#key-eye");
+  if (input.type === "password") {
+    if (serviceId) {
+      try {
+        const data = await api(`/api/model-services/${encodeURIComponent(serviceId)}/key`);
+        input.value = data.key || "";
+      } catch (error) { toast(error.message, true); }
+    }
+    input.type = "text";
+    eye.textContent = "🙈";
+  } else {
+    input.type = "password";
+    input.value = "";
+    eye.textContent = "👁";
+  }
 }
 
 async function setModelRole(role, modelRef) {
@@ -913,6 +880,8 @@ function wire() {
   $("#clear-dialogue-model").onclick=clearDialogueModel;
   $("#model-service-form").onsubmit=submitModelService;
   $("#model-preset-select").onchange=event=>applyPreset(event.target.value);
+  $("#add-provider").onclick=()=>{ const form=$("#model-service-form"); form.closest("details").open=true; form.reset(); form.elements.service_id.value=""; form.elements.timeout_seconds.value="30"; form.elements.enabled.checked=true; form.elements.structured_output.checked=true; form.elements.api_key.type="password"; form.elements.api_key.placeholder="粘贴 API Key"; $("#key-eye").textContent="👁"; form.querySelector("h3").textContent="添加供应商"; form.elements.display_name.focus(); form.scrollIntoView({behavior:"smooth",block:"center"}); };
+  $("#key-eye").onclick=toggleKeyVisibility;
   $("#material-model-role").onchange=event=>setModelRole("material_processing",event.target.value);
   $("#close-drawer").onclick=closeDrawer;
   $$('[data-close]').forEach(button=>button.onclick=()=>$("#"+button.dataset.close).close());

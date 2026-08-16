@@ -94,6 +94,9 @@ def create_handler(service: ProductService):
                         {"ok": True, "model_services": service.model_service_state()}
                     )
                     return
+                if len(parts) == 4 and parts[:2] == ["api", "model-services"] and parts[3] == "key":
+                    self._send_json({"ok": True, "key": service.reveal_model_service_key(parts[2])})
+                    return
                 if parts == ["api", "expression", "renders"]:
                     self._send_json(
                         {"ok": True, "renders": service.expression_records()}
