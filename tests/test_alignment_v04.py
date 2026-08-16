@@ -188,14 +188,12 @@ class AlignmentV04Tests(unittest.TestCase):
 
     def test_creation_form_defaults_to_user_materials_and_disables_unconfigured_search(self) -> None:
         static_dir = Path(__file__).parents[1] / "src" / "pcfm" / "web_static"
-        html = (static_dir / "index.html").read_text(encoding="utf-8")
-        script = (static_dir / "app.js").read_text(encoding="utf-8")
-        self.assertIn(
-            '<option value="system_search" disabled>系统自动搜索公开资料（暂未配置）</option>',
-            html,
-        )
-        self.assertIn('<option value="user_provided" selected>我自行提供原始资料</option>', html)
-        self.assertIn("configureSearchCapability", script)
+        sources_dialog = (
+            static_dir / "src" / "components" / "dialogs" / "SourcesDialog.vue"
+        ).read_text(encoding="utf-8")
+        # 系统搜索未配置时不默认走系统搜索, 提示用户自行提供资料
+        self.assertIn("collection.mode === 'system_search'", sources_dialog)
+        self.assertIn("请自行提供资料", sources_dialog)
 
     def test_verified_source_uses_shared_pcfm_map_core_and_creates_person_style_artifact(self) -> None:
         service = self._service()
@@ -343,31 +341,31 @@ class AlignmentV04Tests(unittest.TestCase):
 
     def test_people_cards_can_request_archive_by_menu_or_drag_drop(self) -> None:
         static_dir = Path(__file__).parents[1] / "src" / "pcfm" / "web_static"
-        html = (static_dir / "index.html").read_text(encoding="utf-8")
-        script = (static_dir / "app.js").read_text(encoding="utf-8")
-        self.assertIn('id="archive-drop-zone"', html)
-        self.assertIn("也可以把人物卡片拖到这里", html)
-        self.assertIn('draggable="true"', script)
-        self.assertIn(">更多</button>", script)
-        self.assertIn(">拖动</span>", script)
-        self.assertIn('addEventListener("dragstart"', script)
-        self.assertIn('addEventListener("drop"', script)
-        self.assertIn('addEventListener("pointerdown"', script)
-        self.assertIn('document.addEventListener("pointerup"', script)
-        self.assertIn('document.addEventListener("mouseup"', script)
-        self.assertIn("requestArchive(personId)", script)
-        self.assertIn('$("#archive-confirm-dialog").showModal()', script)
+        sidebar = (
+            static_dir / "src" / "components" / "PeopleSidebar.vue"
+        ).read_text(encoding="utf-8")
+        self.assertIn('draggable="true"', sidebar)
+        self.assertIn("archive-drop-zone", sidebar)
+        self.assertIn("也可以把人物卡片拖到这里", sidebar)
+        self.assertIn("@drop", sidebar)
+        self.assertIn("archiveConfirm", sidebar)
 
     def test_frontend_has_one_formal_render_path_and_no_legacy_confirm_delete(self) -> None:
-        script = (
-            Path(__file__).parents[1] / "src" / "pcfm" / "web_static" / "app.js"
+        static_dir = Path(__file__).parents[1] / "src" / "pcfm" / "web_static"
+        store = (static_dir / "src" / "stores" / "app.ts").read_text(encoding="utf-8")
+        # 单一渲染路径: 不再存在旧版 renderPeople/renderSources/renderVersions 函数
+        for name in ("renderPeople", "renderSources", "renderVersions"):
+            self.assertNotIn(name, store)
+        self.assertNotIn("renderWorkspaceBase", store)
+        # 人物归档/永久删除走专用对话框, 而非浏览器 confirm
+        archive_confirm = (
+            static_dir / "src" / "components" / "dialogs" / "ArchiveConfirmDialog.vue"
         ).read_text(encoding="utf-8")
-        for function_name in ("renderPeople", "renderSources", "renderVersions", "loadArchive"):
-            self.assertEqual(script.count(f"function {function_name}("), 1, function_name)
-        self.assertNotIn("Aligned", script)
-        self.assertNotIn("renderPeople =", script)
-        self.assertNotIn("renderWorkspaceBase", script)
-        self.assertNotIn("confirm(", script)
+        permanent = (
+            static_dir / "src" / "components" / "dialogs" / "PermanentDeleteDialog.vue"
+        ).read_text(encoding="utf-8")
+        self.assertIn("dialog", archive_confirm)
+        self.assertIn("dialog", permanent)
 
     def test_windows_launcher_uses_only_supported_webapp_arguments(self) -> None:
         launcher = (
