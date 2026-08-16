@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from .model_services import ModelServiceError
 
@@ -70,6 +71,11 @@ _TOOLS = [
         "web_search",
         "联网搜索某个人物/话题的公开资料并抓取原文(结果只进候选,未核实说话人)",
         {"person_id": "人物ID(必填)", "query": "搜索关键词(必填,如人物姓名)"},
+    ),
+    (
+        "collect_wikipedia",
+        "从维基百科收集某个人物的完整资料(词条全文+引用的一手来源链接),结果只进候选",
+        {"person_id": "人物ID(必填)"},
     ),
 ]
 
@@ -217,7 +223,58 @@ class AssistantEngine:
             return self._process_materials(self._resolve_person(args.get("person_id"), by_name))
         if name == "web_search":
             return self._web_search(self._resolve_person(args.get("person_id"), by_name), args)
+        if name == "collect_wikipedia":
+            return self._collect_wikipedia(self._resolve_person(args.get("person_id"), by_name))
         return "未知工具：" + name
+
+    def _collect_wikipedia(self, pid):
+        try:
+            person = self.service.get_person(pid)
+        except Exception:
+            return "人物不存在。"
+        name = str(person.get("name", "")).strip()
+        if not name:
+            return "人物没有姓名，无法搜维基。"
+        wiki = self.service.wikipedia
+        titles = wiki.search_titles(name, limit=3)
+        if not titles:
+            return "维基百科没搜到「%s」。" % name
+        title = titles[0]
+        try:
+            text = wiki.article_text(title)
+        except Exception as error:
+            return "抓取维基词条失败：%s" % error
+        self.service.add_conversation_text_source(
+            pid,
+            title="维基百科：%s" % title,
+            text=text,
+            speaker="",
+            dataset_role="reference_only",
+            content_authenticity="unverified_material",
+            source_locator="wikipedia",
+            source_url="https://%s.wikipedia.org/wiki/%s" % (wiki.language, quote(title)),
+            source_context="维基词条全文；二手整理，未经核实。",
+        )
+        links = wiki.external_links(title, limit=60)
+        added = 0
+        for url in links:
+            try:
+                self.service.add_conversation_url_source(
+                    pid,
+                    url=url,
+                    speaker="",
+                    dataset_role="reference_only",
+                    content_authenticity="unverified_material",
+                    source_locator="wikipedia_extlink",
+                    source_context="维基引用的一手来源；尚未确认说话人。",
+                )
+                added += 1
+            except Exception:
+                continue
+        return (
+            "已收集：维基词条《%s》全文 + 抓取 %d 篇引用来源（共找到 %d 条链接）。"
+            "全部标为候选，可到该人物「人物资料」里一键处理。"
+        ) % (title, added, len(links))
 
     def _web_search(self, pid, args):
         query = str(args.get("query", "")).strip()

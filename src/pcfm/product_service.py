@@ -37,7 +37,7 @@ from .expression_renderer import (
 )
 from .ledger import EventLedger, VerificationAuthority, observation_payload
 from .model_services import ModelServiceError, ModelServiceManager
-from .public_search import BingRssPublicSearch, PublicSearchError
+from .public_search import BingRssPublicSearch, PublicSearchError, WikipediaCollector
 from .storage import load_bundle, save_bundle
 from .synthetic import FEATURE_NAMES, generate_population_dataset
 from .workflow import (
@@ -178,6 +178,7 @@ class ProductService:
             )
         else:
             self.public_search = None if public_search is False else public_search
+        self.wikipedia = WikipediaCollector()
         self.expression_renderer = ExpressionRenderer(
             builtin_expression_profile_path()
         )

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 from email.utils import parsedate_to_datetime
 from typing import Protocol
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote, quote_plus, urlparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
@@ -102,3 +103,49 @@ class BingRssPublicSearch:
             if len(results) >= max(1, int(limit)):
                 break
         return results
+
+
+class WikipediaCollector:
+    """免费维基收集器：搜词条 → 抓全文 → 提取外部链接（一手来源）。结果均为候选。"""
+
+    provider_id = "wikipedia-public-web"
+
+    def __init__(self, language: str = "zh"):
+        self.language = language
+        self.base = f"https://{language}.wikipedia.org/w"
+        self.headers = {"User-Agent": "PCFM/0.5 local evidence collector"}
+
+    def _get_json(self, url: str) -> dict[str, object]:
+        request = Request(url, headers={**self.headers, "Accept": "application/json"})
+        with urlopen(request, timeout=20) as response:
+            payload = response.read(8 * 1024 * 1024)
+        return json.loads(payload.decode("utf-8"))
+
+    def search_titles(self, query: str, limit: int = 3) -> list[str]:
+        url = (
+            f"{self.base}/api.php?action=query&list=search&srsearch={quote_plus(query)}"
+            f"&format=json&srlimit={max(1, int(limit))}"
+        )
+        data = self._get_json(url)
+        return [str(item["title"]) for item in data.get("query", {}).get("search", [])]
+
+    def article_text(self, title: str) -> str:
+        url = f"{self.base}/api/rest_v1/page/plain/{quote(title)}"
+        request = Request(url, headers=self.headers)
+        with urlopen(request, timeout=25) as response:
+            return response.read(8 * 1024 * 1024).decode("utf-8")
+
+    def external_links(self, title: str, limit: int = 60) -> list[str]:
+        url = (
+            f"{self.base}/api.php?action=query&prop=extlinks&ellimit=max"
+            f"&titles={quote_plus(title)}&format=json&redirects=1"
+        )
+        data = self._get_json(url)
+        links: list[str] = []
+        for page in data.get("query", {}).get("pages", {}).values():
+            for item in page.get("extlinks", []) or []:
+                link = str(item.get("url", "")).strip()
+                if link and link not in links:
+                    links.append(link)
+        return links[: max(1, int(limit))]
+
