@@ -171,9 +171,10 @@ class ProductService:
             self.people_dir, model_services=self.model_services
         )
         if public_search is None:
-            configured_provider = os.environ.get("PCFM_PUBLIC_SEARCH_PROVIDER", "").strip().casefold()
+            # 默认启用免 key 的 Bing RSS 搜索；设 PCFM_PUBLIC_SEARCH_PROVIDER=none 可关闭。
+            configured_provider = os.environ.get("PCFM_PUBLIC_SEARCH_PROVIDER", "bing_rss").strip().casefold()
             self.public_search = (
-                BingRssPublicSearch() if configured_provider == "bing_rss" else None
+                BingRssPublicSearch() if configured_provider != "none" else None
             )
         else:
             self.public_search = None if public_search is False else public_search

@@ -66,6 +66,11 @@ _TOOLS = [
         "一键处理某个人物的全部原始材料(确认来源→提取候选→确认候选,自动生成模型版本),之后即可对话",
         {"person_id": "人物ID(必填)"},
     ),
+    (
+        "web_search",
+        "联网搜索某个人物/话题的公开资料并抓取原文(结果只进候选,未核实说话人)",
+        {"person_id": "人物ID(必填)", "query": "搜索关键词(必填,如人物姓名)"},
+    ),
 ]
 
 
@@ -210,7 +215,50 @@ class AssistantEngine:
             return "已永久删除。"
         if name == "process_materials":
             return self._process_materials(self._resolve_person(args.get("person_id"), by_name))
+        if name == "web_search":
+            return self._web_search(self._resolve_person(args.get("person_id"), by_name), args)
         return "未知工具：" + name
+
+    def _web_search(self, pid, args):
+        query = str(args.get("query", "")).strip()
+        if not query:
+            return "请提供搜索关键词。"
+        if self.service.public_search is None:
+            return "搜索服务未配置。"
+        try:
+            person = self.service.get_person(pid)
+        except Exception:
+            person = {}
+        results = self.service.public_search.search(
+            person_name=query,
+            identity_note=str(person.get("identity_note", "")),
+            language="zh",
+            limit=5,
+        )
+        if not results:
+            return "没搜到结果。"
+        added = 0
+        for r in results:
+            url = str(r.get("url", "")).strip()
+            if not url:
+                continue
+            try:
+                self.service.add_conversation_url_source(
+                    pid,
+                    url=url,
+                    speaker="",
+                    dataset_role="reference_only",
+                    content_authenticity="unverified_material",
+                    source_locator="web_search",
+                    source_context="联网搜索抓取；尚未确认说话人。",
+                )
+                added += 1
+            except Exception:
+                continue
+        return (
+            "搜索到 %d 条结果，已抓取 %d 篇原文加入候选（reference_only，未核实说话人）。"
+            "可到该人物「人物资料」里审核确认。"
+        ) % (len(results), added)
 
     def _process_materials(self, pid):
         """确认来源 → 提取候选 → 确认候选；每确认一条候选自动生成模型版本。"""
