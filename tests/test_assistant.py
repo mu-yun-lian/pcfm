@@ -17,6 +17,7 @@ class AssistantToolTests(unittest.TestCase):
         self.assistant = self.service.assistant
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def test_create_person_tool(self) -> None:

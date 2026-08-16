@@ -25,6 +25,7 @@ from .assistant import AssistantEngine
 from .data_errors import PcfmDataError, safe_read_json
 from .db import Database
 from .jobs import JobRunner, JobStore
+from .repositories import PersonRepository
 from .contracts import Observation, Scenario
 from .cognitive_workbench import (
     CognitiveWorkbench,
@@ -188,6 +189,7 @@ class ProductService:
         self._locks_guard = threading.Lock()
         self._person_locks: dict[str, threading.RLock] = {}
         self.db = Database(self.data_dir / "pcfm.db")
+        self.person_repo = PersonRepository(self.db)
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
         if seed_example and not any(self.people_dir.iterdir()):
@@ -460,6 +462,7 @@ class ProductService:
                 }
             )
             _write_json(self._person_path(person_id), raw_person)
+            self.person_repo.upsert(raw_person)
             self._conversation_call(
                 self.conversation.configure,
                 person_id,
@@ -1008,6 +1011,7 @@ class ProductService:
                 person["feature_names"] = list(names)
             person["updated_at"] = _utc_now()
             _write_json(self._person_path(person_id), person)
+            self.person_repo.upsert(person)
             if any(
                 key in changes
                 for key in (

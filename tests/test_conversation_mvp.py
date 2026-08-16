@@ -96,6 +96,7 @@ class ConversationMVPTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _add_confirmed(

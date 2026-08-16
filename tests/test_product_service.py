@@ -42,6 +42,7 @@ class ProductServiceTests(unittest.TestCase):
         self.person_id = str(self.person["person_id"])
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def test_ordinary_json_train_predict_update_export_and_reload(self) -> None:
