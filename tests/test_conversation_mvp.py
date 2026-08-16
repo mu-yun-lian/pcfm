@@ -543,7 +543,7 @@ startxref
             def read(self, _limit: int):
                 return b"<html><title>Interview page</title><body><p>Public source statement.</p></body></html>"
 
-        with patch("pcfm.conversation_mvp.urlopen", return_value=Response()):
+        with patch("pcfm.conversation.sources.urlopen", return_value=Response()):
             url = self.service.add_conversation_url_source(
                 person_id,
                 url="https://example.org/interview",
