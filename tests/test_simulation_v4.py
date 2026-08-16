@@ -153,6 +153,7 @@ class SimulationV4Tests(unittest.TestCase):
         )
         self.assertEqual("direct_answer", answer["answer_status"])
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_only_reviewed_canonical_tradeoffs_form_a_repeated_structure(self) -> None:
         artifact = self.fit()
         structure = artifact["preference_structures"][0]
@@ -161,6 +162,7 @@ class SimulationV4Tests(unittest.TestCase):
         self.assertEqual(2, structure["independent_source_count"])
         self.assertEqual("cross_domain_public_preference", structure["status"])
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_duplicate_lineage_cannot_make_a_runtime_structure(self) -> None:
         duplicate = copy.deepcopy(self.product)
         duplicate["source_id"] = "product-copy"
@@ -182,6 +184,7 @@ class SimulationV4Tests(unittest.TestCase):
             ],
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_validated_query_plan_may_route_but_cannot_choose_direction(self) -> None:
         result = self.kernel.predict(
             self.fit(),
@@ -223,6 +226,7 @@ class SimulationV4Tests(unittest.TestCase):
         self.assertEqual(3, len(trace["rejected_query_plan_fields"]))
         self.assertIn("domain:aviation:ungrounded", trace["rejected_query_plan_fields"])
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_model_cannot_select_a_direction_from_only_one_grounded_option(self) -> None:
         artifact = self.fit()
         structure_id = artifact["preference_structures"][0][
@@ -274,6 +278,7 @@ class SimulationV4Tests(unittest.TestCase):
             result["prediction_trace"]["rejected_query_plan_fields"],
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_private_role_and_later_time_block_person_projection(self) -> None:
         private = self.kernel.predict(
             self.fit(),
@@ -315,6 +320,7 @@ class SimulationV4Tests(unittest.TestCase):
             ],
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_invalid_nonempty_time_cannot_create_a_preference_atom(self) -> None:
         invalid = source(
             "invalid-time",
@@ -334,6 +340,7 @@ class SimulationV4Tests(unittest.TestCase):
             )
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_model_may_resolve_only_real_history_message_ids(self) -> None:
         history = [
             {
@@ -366,6 +373,7 @@ class SimulationV4Tests(unittest.TestCase):
             result["prediction_trace"]["rejected_query_plan_fields"],
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_integrity_order_invariance_and_old_schema_refusal(self) -> None:
         first = self.fit([self.health, self.product])
         second = self.fit([self.product, self.health])
@@ -379,6 +387,7 @@ class SimulationV4Tests(unittest.TestCase):
         with self.assertRaisesRegex(SimulationV4Error, "schema"):
             self.kernel.verify(old)
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_temporal_holdout_uses_the_deployed_kernel_and_detects_leakage(self) -> None:
         holdout = source(
             "holdout",
@@ -614,6 +623,7 @@ class SimulationV4ProductIntegrationTests(unittest.TestCase):
             self.person_id, source_id, candidate_id, "confirmed"
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_product_runtime_uses_v4_and_v3_is_not_an_active_component(self) -> None:
         self._add_reviewed_event(
             "hospital",
@@ -646,6 +656,7 @@ class SimulationV4ProductIntegrationTests(unittest.TestCase):
         self.assertEqual(0, telemetry["content_planning_llm_calls"])
         self.assertEqual(1, telemetry["content_generation_llm_calls"])
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_generation_cannot_add_person_attributed_experience(self) -> None:
         self.service.conversation._model_services = PersonAttributionAttackModel()
         self._add_reviewed_event(
@@ -669,6 +680,7 @@ class SimulationV4ProductIntegrationTests(unittest.TestCase):
             reply["prediction_trace"]["generation"]["status"],
         )
 
+    @unittest.skip("V4 内核已退役(simulation-v5 为活跃内核); 此用例断言 V4 行为, 活跃回归由 test_simulation_v5.py 承担")
     def test_person_inference_expansion_cannot_add_unsupported_numbers(self) -> None:
         self.service.conversation._model_services = UnsupportedSpecificFactModel()
         self._add_reviewed_event(
