@@ -15,7 +15,7 @@ const hasWorkspace = computed(() => !!store.person && !!store.conversation)
       <p class="kicker">PCFM · 对话式人物模拟</p>
       <h2>选择或新建一个人物</h2>
       <p>从真实资料出发，进行有证据边界的多轮交流。</p>
-      <button class="button primary" @click="store.selectAssistant()">创建第一个人物</button>
+      <button class="button primary" @click="store.openCreatePerson()">创建第一个人物</button>
     </div>
   </section>
   <section class="chat-workspace" v-else>

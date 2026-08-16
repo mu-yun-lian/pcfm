@@ -35,6 +35,7 @@ export const useAppStore = defineStore('app', {
     processing: { visible: false, text: '', percent: 0 },
     composerFocusRequest: 0,
     activeJobId: null as string | null,
+    creatingPerson: false as boolean,
     toast: null as null | { message: string; error: boolean; action?: () => Promise<void> },
   }),
 
@@ -66,9 +67,15 @@ export const useAppStore = defineStore('app', {
   actions: {
     openDialog(name: string) {
       this.activeDialog = name
+      this.creatingPerson = false
     },
     closeDialog() {
       this.activeDialog = ''
+      this.creatingPerson = false
+    },
+    openCreatePerson() {
+      this.creatingPerson = true
+      this.activeDialog = 'person'
     },
     requestComposerFocus() {
       this.composerFocusRequest++
@@ -501,6 +508,17 @@ export const useAppStore = defineStore('app', {
       this.activeDialog = ''
       await this.loadPeople(person.person_id)
       this.showToast('人物信息已更新。')
+    },
+
+    async createPerson(body: Record<string, unknown>) {
+      const data = await api<{ person: Person }>('/api/conversation/people', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      this.creatingPerson = false
+      this.activeDialog = ''
+      await this.loadPeople(data.person.person_id)
+      this.showToast('人物已创建。')
     },
 
     async uploadAvatar(dataUrl: string) {

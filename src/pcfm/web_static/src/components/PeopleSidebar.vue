@@ -161,7 +161,10 @@ async function onCardDrop(event: DragEvent, personId: string) {
 
 <template>
   <aside class="people-panel">
-    <div class="sidebar-brand"><span class="brand-wordmark">PCFM</span><span class="brand-sub">对话式人物模拟</span></div>
+    <div class="sidebar-brand">
+      <span class="brand-wordmark">PCFM</span><span class="brand-sub">对话式人物模拟</span>
+      <button class="ss-new" title="新建人物" aria-label="新建人物" @click="store.openCreatePerson()">＋</button>
+    </div>
 
     <label class="sidebar-search">
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">

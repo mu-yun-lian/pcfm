@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useDialog } from '../../composables/useDialog'
 import { useAppStore } from '../../stores/app'
 import { fileToDataUrl } from '../../lib/file'
@@ -12,24 +12,30 @@ const avatarPreview = ref(store.person?.avatar || '/default-person-avatar.png')
 const avatarFileInput = ref<HTMLInputElement>()
 const avatarDropZone = ref<HTMLElement>()
 
-const name = ref(store.person?.name || '')
-const description = ref(store.person?.description || '')
-const identity_note = ref(store.person?.identity_note || '')
-const aliases = ref((store.conversation?.profile?.aliases || []).join(', '))
-const language = ref(store.conversation?.profile?.language || 'zh')
-const focus_domain = ref(store.person?.focus_domain || '')
+const isCreate = computed(() => store.creatingPerson)
+const name = ref(isCreate.value ? '' : store.person?.name || '')
+const description = ref(isCreate.value ? '' : store.person?.description || '')
+const identity_note = ref(isCreate.value ? '' : store.person?.identity_note || '')
+const aliases = ref(isCreate.value ? '' : (store.conversation?.profile?.aliases || []).join(', '))
+const language = ref(isCreate.value ? 'zh' : store.conversation?.profile?.language || 'zh')
+const focus_domain = ref(isCreate.value ? '' : store.person?.focus_domain || '')
 
 async function submit() {
   busy.value = true
+  const body = {
+    name: name.value,
+    description: description.value,
+    aliases: aliases.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean),
+    language: language.value,
+    identity_note: identity_note.value,
+    focus_domain: focus_domain.value,
+  }
   try {
-    await store.submitPerson({
-      name: name.value,
-      description: description.value,
-      aliases: aliases.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean),
-      language: language.value,
-      identity_note: identity_note.value,
-      focus_domain: focus_domain.value,
-    })
+    if (isCreate.value) {
+      await store.createPerson(body)
+    } else {
+      await store.submitPerson(body)
+    }
   } catch (error) {
     store.showToast((error as Error).message, true)
   } finally {
@@ -90,7 +96,7 @@ function onAvatarDrop(event: DragEvent) {
   <dialog ref="el" @close="onClose">
     <form class="dialog-card" @submit.prevent="submit">
       <div class="dialog-head">
-        <div><p class="kicker">人物资料</p><h2>编辑人物</h2></div>
+        <div><p class="kicker">人物资料</p><h2>{{ isCreate ? '新建人物' : '编辑人物' }}</h2></div>
         <button type="button" class="close-button" @click="close">关闭</button>
       </div>
       <div
