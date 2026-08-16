@@ -18,8 +18,10 @@ class VersionServiceMixin:
     def rollback_conversation_version(
         self, person_id: str, version_number: int
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.rollback_version, person_id, version_number
             )
+            self._sync_versions_to_sqlite(person_id)
+            return result

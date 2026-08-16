@@ -109,7 +109,7 @@ class SourceServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.add_text_source,
                 person_id,
                 title=title,
@@ -126,6 +126,8 @@ class SourceServiceMixin:
                 speaker_scope=speaker_scope,
                 entity_aliases=entity_aliases,
             )
+            self._sync_sources_to_sqlite(person_id)
+            return result
 
     def add_conversation_file_source(
         self,
@@ -143,7 +145,7 @@ class SourceServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.add_file_source,
                 person_id,
                 filename=filename,
@@ -156,6 +158,8 @@ class SourceServiceMixin:
                 source_context=source_context,
                 speaker_scope=speaker_scope,
             )
+            self._sync_sources_to_sqlite(person_id)
+            return result
 
     def add_conversation_url_source(
         self,
@@ -172,7 +176,7 @@ class SourceServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.add_url_source,
                 person_id,
                 url=url,
@@ -184,12 +188,16 @@ class SourceServiceMixin:
                 source_context=source_context,
                 speaker_scope=speaker_scope,
             )
+            self._sync_sources_to_sqlite(person_id)
+            return result
 
     def review_conversation_source(
         self, person_id: str, source_id: str, decision: str
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.review_source, person_id, source_id, decision
             )
+            self._sync_sources_to_sqlite(person_id)
+            return result

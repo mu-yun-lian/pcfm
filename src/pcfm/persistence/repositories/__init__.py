@@ -1,4 +1,6 @@
 """Repository 层：SQLite 表访问。"""
 from .person_repo import PersonRepository
+from .source_repo import SourceRepository
+from .version_repo import VersionRepository
 
-__all__ = ["PersonRepository"]
+__all__ = ["PersonRepository", "SourceRepository", "VersionRepository"]

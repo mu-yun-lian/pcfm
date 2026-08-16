@@ -76,6 +76,8 @@ class PcfmService(
         self._person_locks: dict[str, threading.RLock] = {}
         self.db = Database(self.data_dir / "pcfm.db")
         self.person_repo = PersonRepository(self.db)
+        self.source_repo = SourceRepository(self.db)
+        self.version_repo = VersionRepository(self.db)
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
         if seed_example and not any(self.people_dir.iterdir()):
@@ -244,6 +246,32 @@ class PcfmService(
             return method(*args, **kwargs)
         except ConversationError as error:
             raise ProductError(str(error)) from error
+
+    def _sync_sources_to_sqlite(self, person_id: str) -> None:
+        """把 conversation_sources.json 的资料元数据镜像到 source 表; 失败不影响主流程。"""
+        try:
+            sources = self._conversation_call(
+                self.conversation._list, person_id, "conversation_sources.json"
+            )
+            for item in sources:
+                record = dict(item)
+                record["person_id"] = person_id
+                self.source_repo.upsert(record)
+        except Exception:
+            pass
+
+    def _sync_versions_to_sqlite(self, person_id: str) -> None:
+        """把 conversation_versions.json 的版本元数据镜像到 version 表; 失败不影响主流程。"""
+        try:
+            versions = self._conversation_call(
+                self.conversation._list, person_id, "conversation_versions.json"
+            )
+            for item in versions:
+                record = dict(item)
+                record["person_id"] = person_id
+                self.version_repo.upsert(record)
+        except Exception:
+            pass
 
     def _cognitive_call(self, method, *args, **kwargs):
         try:
