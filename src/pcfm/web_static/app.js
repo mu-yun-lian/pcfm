@@ -169,15 +169,17 @@ async function modelServiceAction(serviceId, action, button, payload = {}) {
   busy(button,true);
   try {
     const data=await api(`/api/model-services/${encodeURIComponent(serviceId)}/${action}`,{method:"POST",body:JSON.stringify(payload)});
-    const verifiedForPerson = action === "test" && data.result?.status === "connected" && state.person && payload.model_id;
+    const job = await pollJob(data.job_id);
+    const result = job.result || {};
+    const verifiedForPerson = action === "test" && result.status === "connected" && state.person && payload.model_id;
     if (verifiedForPerson) {
       const modelRef = `${serviceId}:${payload.model_id}`;
       await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/model`, {method:"POST",body:JSON.stringify({model_ref:modelRef})});
       await refreshConversation();
     }
     await loadModelServices();
-    const failed = data.result?.status === "unavailable";
-    toast(verifiedForPerson ? "真实调用验证成功，已用于当前人物。" : data.result?.message || "模型列表已刷新。", failed);
+    const failed = result.status === "unavailable";
+    toast(verifiedForPerson ? "真实调用验证成功，已用于当前人物。" : result.message || "模型列表已刷新。", failed);
   }
   catch(error){toast(error.message,true);} finally {busy(button,false);}
 }
@@ -201,21 +203,24 @@ async function submitModelService(event) {
 
 async function autoVerifyService(serviceId) {
   try {
-    await api(`/api/model-services/${encodeURIComponent(serviceId)}/refresh-models`, {method:"POST", body:"{}"});
+    const refreshRes = await api(`/api/model-services/${encodeURIComponent(serviceId)}/refresh-models`, {method:"POST", body:"{}"});
+    await pollJob(refreshRes.job_id);
     await loadModelServices();
     const service = state.modelServices.services.find(s => s.service_id === serviceId);
     const models = service?.enabled_models || service?.models || [];
     const modelId = service?.default_model || models[0];
     if (!modelId) { toast("已保存，但没读到模型；可手动填模型 ID 后刷新。"); return; }
-    const data = await api(`/api/model-services/${encodeURIComponent(serviceId)}/test`, {method:"POST", body: JSON.stringify({model_id: modelId})});
-    if (data.result?.status === "connected" && state.person) {
+    const testRes = await api(`/api/model-services/${encodeURIComponent(serviceId)}/test`, {method:"POST", body: JSON.stringify({model_id: modelId})});
+    const testJob = await pollJob(testRes.job_id);
+    const result = testJob.result || {};
+    if (result.status === "connected" && state.person) {
       const modelRef = `${serviceId}:${modelId}`;
       await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/model`, {method:"POST", body: JSON.stringify({model_ref: modelRef})});
       await refreshConversation();
     }
     await loadModelServices();
-    const ok = data.result?.status === "connected";
-    toast(ok ? (state.person ? "已保存并自动验证，已用于当前人物。" : "已保存并自动验证通过。") : (data.result?.message || "已保存，但验证未通过。"), !ok);
+    const ok = result.status === "connected";
+    toast(ok ? (state.person ? "已保存并自动验证，已用于当前人物。" : "已保存并自动验证通过。") : (result.message || "已保存，但验证未通过。"), !ok);
   } catch (error) { toast("已保存，但自动验证失败：" + error.message, true); }
 }
 

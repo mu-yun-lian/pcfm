@@ -263,13 +263,19 @@ def create_handler(service: ProductService):
                     and parts[3] in {"test", "refresh-models"}
                 ):
                     if parts[3] == "test":
-                        result = service.test_model_service(
-                            parts[2], str(body.get("model_id", ""))
+                        job = service.job_runner.submit(
+                            "model_test",
+                            None,
+                            lambda progress=None, cancel=None: service.test_model_service(parts[2], str(body.get("model_id", ""))),
                         )
-                        self._send_json({"ok": True, "result": result})
+                        self._send_json({"ok": True, "job_id": job.job_id})
                     else:
-                        models = service.refresh_model_service_models(parts[2])
-                        self._send_json({"ok": True, "models": models})
+                        job = service.job_runner.submit(
+                            "refresh_models",
+                            None,
+                            lambda progress=None, cancel=None: service.refresh_model_service_models(parts[2]),
+                        )
+                        self._send_json({"ok": True, "job_id": job.job_id})
                     return
                 if parts == ["api", "expression", "render"]:
                     result = service.render_expression(
