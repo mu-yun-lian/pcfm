@@ -57,11 +57,16 @@ class WebAppTests(unittest.TestCase):
     def test_static_page_health_and_full_http_closed_loop(self) -> None:
         status, _headers, page = self.request("/")
         self.assertEqual(status, 200)
-        self.assertIn("PCFM 对话式人物模拟", page.decode("utf-8"))
-        self.assertIn(f'/app.js?v={APP_VERSION}', page.decode("utf-8"))
-        status, _headers, app = self.request("/app.js")
-        self.assertEqual(status, 200)
-        self.assertIn(f'const APP_VERSION = "{APP_VERSION}";', app.decode("utf-8"))
+        page_text = page.decode("utf-8")
+        self.assertIn("PCFM 对话式人物模拟", page_text)
+        # Vue3(Vite) 构建产物优先; 未构建时回退旧 vanilla 前端
+        if '<div id="app">' in page_text:
+            self.assertIn("/assets/", page_text)
+        else:
+            self.assertIn(f'/app.js?v={APP_VERSION}', page_text)
+            status, _headers, app = self.request("/app.js")
+            self.assertEqual(status, 200)
+            self.assertIn(f'const APP_VERSION = "{APP_VERSION}";', app.decode("utf-8"))
         status, health = self.json_request("/api/health")
         self.assertEqual((status, health["ok"]), (200, True))
 
