@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 
 
 INTERVIEW = """Q: Should a studio release a broad first version?
@@ -24,7 +24,7 @@ class ResponsePredictionV1Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
-        self.service = ProductService(self.storage, seed_example=False)
+        self.service = PcfmService(self.storage, seed_example=False)
         self.person = self.service.create_conversation_person(
             name="Alice Example",
             aliases=["Alice"],
@@ -37,6 +37,7 @@ class ResponsePredictionV1Tests(unittest.TestCase):
         self.person_id = str(self.person["person_id"])
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _confirm_interview(self) -> dict[str, object]:
@@ -141,7 +142,7 @@ class ResponsePredictionV1Tests(unittest.TestCase):
         self.assertEqual(summary["status"], "insufficient_evidence")
 
     def test_system_search_mode_is_rejected_when_provider_is_unconfigured(self) -> None:
-        service = ProductService(self.storage / "unconfigured-search", seed_example=False, public_search=False)
+        service = PcfmService(self.storage / "unconfigured-search", seed_example=False, public_search=False)
         with self.assertRaisesRegex(ProductError, "未配置"):
             service.create_conversation_person(
                 name="Public Person",

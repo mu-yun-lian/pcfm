@@ -4,7 +4,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 from pcfm.response_prediction import (
     classify_event_type,
     classify_event_types,
@@ -168,7 +168,7 @@ class PredictionLayerTargetTests(unittest.TestCase):
 
     def test_public_runtime_consumes_v4_frames_without_inventing_person_knowledge(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            service = ProductService(
+            service = PcfmService(
                 Path(directory), seed_example=False, seed_demos=True
             )
             reply = service.send_conversation_message(
@@ -186,7 +186,7 @@ class PredictionLayerTargetTests(unittest.TestCase):
 
     def test_real_people_holdouts_report_baselines_without_accuracy_claim(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            service = ProductService(
+            service = PcfmService(
                 Path(directory), seed_example=False, seed_demos=True
             )
             reports = [

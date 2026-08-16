@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 
 
 MODEL_QA = """Q: How should the studio release a product?
@@ -81,7 +81,7 @@ class ConversationMVPTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
-        self.service = ProductService(self.storage, seed_example=False)
+        self.service = PcfmService(self.storage, seed_example=False)
         self.alice = self.service.create_conversation_person(
             name="Alice Example",
             aliases=["Alice"],
@@ -144,7 +144,7 @@ class ConversationMVPTests(unittest.TestCase):
         self.assertIn("broad launch", bob_reply["text"])
         self.assertNotEqual(alice_reply["text"], bob_reply["text"])
 
-        reloaded = ProductService(self.storage, seed_example=False)
+        reloaded = PcfmService(self.storage, seed_example=False)
         alice_summary = reloaded.conversation_summary(alice_id)
         bob_summary = reloaded.conversation_summary(bob_id)
         self.assertEqual(len(alice_summary["messages"]), 2)

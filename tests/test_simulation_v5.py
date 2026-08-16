@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from pcfm.model_services import ModelServiceError
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 from pcfm.simulation_v5 import (
     SimulationKernelV5,
     SimulationV5Error,
@@ -488,7 +488,7 @@ class RetryingOpinionFixture(V5ModelFixture):
 class SimulationV5ProductIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=False)
         person = self.service.create_conversation_person(
             name="Person A",
             aliases=[],
@@ -502,6 +502,7 @@ class SimulationV5ProductIntegrationTests(unittest.TestCase):
         self.service.conversation._model_services = V5ModelFixture()
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def add_event(self, title: str, text: str, date: str) -> None:

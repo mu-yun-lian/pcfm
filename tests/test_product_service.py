@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 
 
 def diagnostic_records(count: int = 50) -> list[dict[str, object]]:
@@ -30,10 +30,10 @@ def diagnostic_records(count: int = 50) -> list[dict[str, object]]:
     return records
 
 
-class ProductServiceTests(unittest.TestCase):
+class PcfmServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=False)
         self.person = self.service.create_person(
             name="测试人物",
             description="本地产品测试",
@@ -101,7 +101,7 @@ class ProductServiceTests(unittest.TestCase):
         exported = self.service.export_person(self.person_id)
         other = tempfile.TemporaryDirectory()
         try:
-            restored_service = ProductService(Path(other.name), seed_example=False)
+            restored_service = PcfmService(Path(other.name), seed_example=False)
             restored = restored_service.import_product_export(exported)
             self.assertEqual(restored["person_id"], self.person_id)
             self.assertEqual(len(restored["versions"]), 2)
@@ -148,7 +148,7 @@ class ProductServiceTests(unittest.TestCase):
     def test_built_in_example_passes_and_completes_closed_loop(self) -> None:
         other = tempfile.TemporaryDirectory()
         try:
-            service = ProductService(Path(other.name), seed_example=True)
+            service = PcfmService(Path(other.name), seed_example=True)
             detail = service.get_person("example-person")
             self.assertEqual(detail["sample_count"], 580)
             model = service.train("example-person")

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 
 
 CHALLENGE = (
@@ -18,7 +18,7 @@ CHALLENGE = (
 class CognitiveWorkbenchTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=True)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=True)
         self.person_id = "josh-hawley-section230"
 
     def tearDown(self) -> None:
@@ -128,7 +128,7 @@ class CognitiveWorkbenchTests(unittest.TestCase):
         exported = self.service.export_person(self.person_id)
         other = tempfile.TemporaryDirectory()
         try:
-            restored = ProductService(Path(other.name), seed_example=False)
+            restored = PcfmService(Path(other.name), seed_example=False)
             restored.import_product_export(exported)
             restored_detail = restored.get_person(self.person_id)
             self.assertEqual(restored_detail["cognitive"]["latest_card"]["version"], 2)

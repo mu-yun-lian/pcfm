@@ -6,19 +6,20 @@ import unittest
 from pathlib import Path
 
 from pcfm import conversation_mvp as cm
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 
 
 class SessionMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
-        self.service = ProductService(self.storage, seed_example=False)
+        self.service = PcfmService(self.storage, seed_example=False)
         self.person = self.service.create_conversation_person(name="Alice Example")
         self.person_id = str(self.person["person_id"])
         self._reset_sessions()
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _reset_sessions(self) -> None:
@@ -139,13 +140,14 @@ class SessionCrudTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
-        self.service = ProductService(self.storage, seed_example=False)
+        self.service = PcfmService(self.storage, seed_example=False)
         self.person = self.service.create_conversation_person(name="Alice Example")
         self.person_id = str(self.person["person_id"])
         self.cv = self.service.conversation
         self._reset_sessions()
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _reset_sessions(self) -> None:

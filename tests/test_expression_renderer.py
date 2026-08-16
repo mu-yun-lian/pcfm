@@ -16,7 +16,7 @@ from pcfm.expression_renderer import (
     render_person_surface_style,
     seal_expression_profile,
 )
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 
 
 def frozen_contract(**changes: object) -> dict[str, object]:
@@ -233,9 +233,9 @@ class ExpressionRendererTests(unittest.TestCase):
     def test_product_service_persists_render_record(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             storage = Path(temporary)
-            first = ProductService(storage, seed_example=False)
+            first = PcfmService(storage, seed_example=False)
             first.render_expression(frozen_contract())
-            second = ProductService(storage, seed_example=False)
+            second = PcfmService(storage, seed_example=False)
             records = second.expression_records()
             self.assertEqual(len(records), 1)
             self.assertEqual(records[0]["structured_content"], frozen_contract())

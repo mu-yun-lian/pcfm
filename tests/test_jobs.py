@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 
-from pcfm.db import Database
+from pcfm.persistence.db import Database
 from pcfm.jobs import JobRunner, JobStatus, JobStore
 
 

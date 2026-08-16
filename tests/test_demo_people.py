@@ -5,14 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 
 
 class VerifiedDemoPeopleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
-        self.service = ProductService(
+        self.service = PcfmService(
             self.storage, seed_example=False, seed_demos=True
         )
 
@@ -43,7 +43,7 @@ class VerifiedDemoPeopleTests(unittest.TestCase):
                 {"direct", "nearby", "out_of_scope"},
                 {item["kind"] for item in detail["recommended_questions"]},
             )
-        reloaded = ProductService(
+        reloaded = PcfmService(
             self.storage, seed_example=False, seed_demos=True
         )
         self.assertEqual(2, len(reloaded.list_people()))

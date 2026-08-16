@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 from pcfm.webapp import APP_VERSION, build_server
 
 
@@ -53,14 +53,19 @@ class AlignmentV04Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name)
+        self._services = []
 
     def tearDown(self) -> None:
+        for service in self._services:
+            service.close()
         self.temporary.cleanup()
 
-    def _service(self, **kwargs) -> ProductService:
-        return ProductService(self.storage, seed_example=False, **kwargs)
+    def _service(self, **kwargs) -> PcfmService:
+        service = PcfmService(self.storage, seed_example=False, **kwargs)
+        self._services.append(service)
+        return service
 
-    def _person(self, service: ProductService, name: str = "Alice Example") -> dict[str, object]:
+    def _person(self, service: PcfmService, name: str = "Alice Example") -> dict[str, object]:
         return service.create_conversation_person(
             name=name,
             aliases=["Alice"] if name == "Alice Example" else [],
@@ -69,7 +74,7 @@ class AlignmentV04Tests(unittest.TestCase):
             focus_domain="product interviews",
         )
 
-    def _verified_source(self, service: ProductService, person_id: str) -> dict[str, object]:
+    def _verified_source(self, service: PcfmService, person_id: str) -> dict[str, object]:
         source = service.add_conversation_text_source(
             person_id,
             title="Verified transcript",
@@ -87,7 +92,7 @@ class AlignmentV04Tests(unittest.TestCase):
         )
 
     def _verified_style_source(
-        self, service: ProductService, person_id: str, *, person_name: str, text: str
+        self, service: PcfmService, person_id: str, *, person_name: str, text: str
     ) -> dict[str, object]:
         source = service.add_conversation_text_source(
             person_id,

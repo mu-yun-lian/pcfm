@@ -19,7 +19,7 @@ from typing import Mapping, Sequence
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from ..atomic import atomic_write_json
+from ..persistence.atomic import atomic_write_json
 from ..expression_renderer import (
     ExpressionRenderer,
     ExpressionRendererError,

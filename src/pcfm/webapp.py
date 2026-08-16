@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from .logging_config import setup_logging
-from .product_service import ProductError, ProductService
+from .services import ProductError, PcfmService
 
 
 STATIC_DIR = Path(__file__).with_name("web_static")
@@ -21,7 +21,7 @@ from . import APP_VERSION
 DEFAULT_DATA_DIR = Path.home() / "PCFM人物对话系统数据"
 
 
-def create_handler(service: ProductService):
+def create_handler(service: PcfmService):
     class Handler(BaseHTTPRequestHandler):
         server_version = f"PCFMConversationMVP/{APP_VERSION}"
 
@@ -672,7 +672,7 @@ def build_server(
     seed_example: bool = True,
     seed_demos: bool = False,
 ) -> ThreadingHTTPServer:
-    service = ProductService(data_dir, seed_example=seed_example, seed_demos=seed_demos)
+    service = PcfmService(data_dir, seed_example=seed_example, seed_demos=seed_demos)
     server = ThreadingHTTPServer((host, port), create_handler(service))
     server.daemon_threads = True
     server.service = service

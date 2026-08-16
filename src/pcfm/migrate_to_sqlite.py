@@ -10,8 +10,8 @@ import argparse
 from pathlib import Path
 
 from .data_errors import safe_read_json
-from .db import Database
-from .repositories import PersonRepository
+from .persistence.db import Database
+from .persistence.repositories import PersonRepository
 
 
 def migrate(data_dir: Path) -> dict:

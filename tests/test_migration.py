@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pcfm.db import Database
+from pcfm.persistence.db import Database
 from pcfm.migrate_to_sqlite import migrate, rollback
-from pcfm.repositories import PersonRepository
+from pcfm.persistence.repositories import PersonRepository
 
 
 class MigrationTests(unittest.TestCase):

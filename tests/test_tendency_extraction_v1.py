@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pcfm.product_service import ProductService
+from pcfm.services import PcfmService
 from pcfm.response_prediction import TENDENCY_TYPES
 
 
@@ -67,12 +67,13 @@ class TradeoffExtractionModel:
 class TendencyExtractionV1Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=False)
         self.alice = self.service.create_conversation_person(
             name="Alice Example", aliases=["Alice"], language="en"
         )
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _add_source(self) -> str:
@@ -195,12 +196,13 @@ class EvaluationExtractionModel:
 class EvaluationProjectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=False)
         self.alice = self.service.create_conversation_person(
             name="Alice Example", aliases=["Alice"], language="en"
         )
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def test_evaluation_tendency_drives_object_evaluation(self) -> None:

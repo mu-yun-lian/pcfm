@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from pcfm.model_services import ModelServiceError, ModelServiceManager, SUPPORTED_PROTOCOLS
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 from pcfm.response_prediction_v2 import KERNEL_ID_V2, ResponsePredictionKernelV2
 
 
@@ -97,10 +97,11 @@ class ResponseKernelV2Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.service = ProductService(self.root, seed_example=False, seed_demos=True)
+        self.service = PcfmService(self.root, seed_example=False, seed_demos=True)
         self.person_id = "demo-sally-ride"
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temp.cleanup()
 
     def send(self, text: str, model_ref: str = "") -> dict[str, object]:
@@ -295,7 +296,7 @@ class ModelServiceSecurityTests(unittest.TestCase):
         )
 
     def test_person_export_and_browser_state_do_not_contain_secret(self) -> None:
-        product = ProductService(self.root / "product", seed_example=False, seed_demos=True)
+        product = PcfmService(self.root / "product", seed_example=False, seed_demos=True)
         product.model_services.save_service(
             {"display_name": "X", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "api_key": "never-export-me", "enabled": True, "models": ["x"]}
         )
@@ -330,7 +331,7 @@ class ModelServiceSecurityTests(unittest.TestCase):
         self.assertEqual("model-a", public["last_probe_model"])
 
     def test_model_selection_only_changes_next_message_and_not_person_version(self) -> None:
-        product = ProductService(self.root / "selection", seed_example=False, seed_demos=True)
+        product = PcfmService(self.root / "selection", seed_example=False, seed_demos=True)
         manager = product.model_services
         first = manager.save_service({"display_name": "A", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["a"]})
         second = manager.save_service({"display_name": "B", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["b"]})
@@ -345,12 +346,12 @@ class ModelServiceSecurityTests(unittest.TestCase):
         self.assertEqual("", product.conversation_summary(person_id)["dialogue_model_ref"])
 
     def test_person_model_selections_are_isolated_and_persistent(self) -> None:
-        product = ProductService(self.root / "isolation", seed_example=False, seed_demos=True)
+        product = PcfmService(self.root / "isolation", seed_example=False, seed_demos=True)
         cfg = product.model_services.save_service({"display_name": "A", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["a", "b"]})
         with mock.patch.object(product.model_services, "resolve_model_ref", return_value=({}, "model")):
             product.select_dialogue_model("demo-sally-ride", f"{cfg['service_id']}:a")
             product.select_dialogue_model("demo-barack-obama", f"{cfg['service_id']}:b")
-        reloaded = ProductService(self.root / "isolation", seed_example=False)
+        reloaded = PcfmService(self.root / "isolation", seed_example=False)
         self.assertTrue(reloaded.conversation_summary("demo-sally-ride")["dialogue_model_ref"].endswith(":a"))
         self.assertTrue(reloaded.conversation_summary("demo-barack-obama")["dialogue_model_ref"].endswith(":b"))
 

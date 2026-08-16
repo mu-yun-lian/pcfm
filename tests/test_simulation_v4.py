@@ -12,7 +12,7 @@ from pcfm.simulation_v4 import (
     SimulationKernelV4,
     SimulationV4Error,
 )
-from pcfm.product_service import ProductError, ProductService
+from pcfm.services import ProductError, PcfmService
 
 
 def reviewed_frame(
@@ -574,7 +574,7 @@ class UnsupportedSpecificFactModel(SemanticMaterialModel):
 class SimulationV4ProductIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = ProductService(Path(self.temporary.name), seed_example=False)
+        self.service = PcfmService(Path(self.temporary.name), seed_example=False)
         person = self.service.create_conversation_person(
             name="Person A",
             aliases=[],
