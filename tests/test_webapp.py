@@ -68,8 +68,13 @@ class WebAppTests(unittest.TestCase):
         status, created = self.json_request("/api/conversation/people", "POST", {"name": "Archive Chat"})
         self.assertEqual(status, 201)
         person_id = created["person"]["person_id"]
-        status, _reply = self.json_request(f"/api/people/{person_id}/conversation/messages", "POST", {"text": "你好"})
+        status, sent = self.json_request(f"/api/people/{person_id}/conversation/messages", "POST", {"text": "你好"})
         self.assertEqual(status, 201)
+        for _ in range(200):
+            _, job_state = self.json_request(f"/api/jobs/{sent['job_id']}")
+            if job_state["job"]["status"] in {"succeeded", "failed"}:
+                break
+            time.sleep(0.05)
         status, new_session = self.json_request(f"/api/people/{person_id}/conversation/new", "POST", {})
         self.assertEqual(status, 200)
         first_id = new_session["conversation"]["session_id"]

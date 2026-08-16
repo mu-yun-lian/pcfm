@@ -19,6 +19,7 @@ from typing import Mapping, Sequence
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from .atomic import atomic_write_json
 from .expression_renderer import (
     ExpressionRenderer,
     ExpressionRendererError,
@@ -259,13 +260,7 @@ def _localize_view(view: dict[str, object]) -> dict[str, object]:
 
 
 def _write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
+    atomic_write_json(path, value)
 
 
 def _read_json(path: Path, default: object) -> object:
@@ -485,6 +480,29 @@ class ConversationWorkbench:
         if isinstance(progress, dict):
             return dict(progress)
         return {"active": False}
+
+    def _backup_before_version(self, person_id: str, version_number: int) -> None:
+        """版本创建前备份元数据，保留最近 5 份；失败不阻断。"""
+        try:
+            backup_dir = self._person_dir(person_id) / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            snapshot = {
+                "person_id": person_id,
+                "version": version_number,
+                "created_at": _utc_now(),
+                "conversation_versions": self._list(person_id, "conversation_versions.json"),
+                "conversation_state": _read_json(self._path(person_id, "conversation_state.json"), {}),
+            }
+            _write_json(backup_dir / f"pre-version-{version_number}.json", snapshot)
+            backups = sorted(
+                backup_dir.glob("pre-version-*.json"),
+                key=lambda p: p.stat().st_mtime_ns,
+                reverse=True,
+            )
+            for old in backups[5:]:
+                old.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     @staticmethod
     def _file_tag(path: Path) -> tuple:
@@ -2205,6 +2223,7 @@ class ConversationWorkbench:
             "validation_status": validation_status,
             "response_accuracy_status": "not_assessed",
         }
+        self._backup_before_version(person_id, int(version["version"]))
         versions.append(version)
         _write_json(self._path(person_id, "conversation_versions.json"), versions)
         state = self._state(person_id)
@@ -2250,6 +2269,7 @@ class ConversationWorkbench:
             "style_artifact_hash": style_artifact["artifact_hash"],
             "validation_status": "style_source_integrity_and_semantic_gate_passed_accuracy_not_assessed",
         }
+        self._backup_before_version(person_id, int(version["version"]))
         versions.append(version)
         _write_json(self._path(person_id, "conversation_versions.json"), versions)
         state["active_version"] = version_number

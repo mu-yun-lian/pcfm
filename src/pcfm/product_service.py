@@ -20,6 +20,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from .applicability import PredictionRefusedError
+from .atomic import atomic_write_json
 from .assistant import AssistantEngine
 from .data_errors import PcfmDataError, safe_read_json
 from .jobs import JobRunner, JobStore
@@ -112,13 +113,7 @@ def _canonical_hash(value: object) -> str:
 
 
 def _write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
+    atomic_write_json(path, value)
 
 
 def _read_json(path: Path, default: object | None = None) -> object:
