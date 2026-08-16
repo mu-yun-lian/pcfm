@@ -103,10 +103,16 @@ class Database:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA busy_timeout=5000")
-        self.conn.executescript(SCHEMA)
+        self._conn: sqlite3.Connection | None = None
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA busy_timeout=5000")
+            self._conn.executescript(SCHEMA)
+        return self._conn
 
     @contextmanager
     def transaction(self):
@@ -118,4 +124,6 @@ class Database:
             raise
 
     def close(self) -> None:
-        self.conn.close()
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None

@@ -23,6 +23,7 @@ from .applicability import PredictionRefusedError
 from .atomic import atomic_write_json
 from .assistant import AssistantEngine
 from .data_errors import PcfmDataError, safe_read_json
+from .db import Database
 from .jobs import JobRunner, JobStore
 from .contracts import Observation, Scenario
 from .cognitive_workbench import (
@@ -186,7 +187,8 @@ class ProductService:
         self._lock = threading.RLock()
         self._locks_guard = threading.Lock()
         self._person_locks: dict[str, threading.RLock] = {}
-        self.job_store = JobStore(self.data_dir / "jobs")
+        self.db = Database(self.data_dir / "pcfm.db")
+        self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
         if seed_example and not any(self.people_dir.iterdir()):
             self._seed_example()
@@ -324,6 +326,10 @@ class ProductService:
 
     def cancel_job(self, job_id: str) -> bool:
         return self.job_runner.cancel(job_id)
+
+    def close(self) -> None:
+        self.job_runner.shutdown(wait=False)
+        self.db.close()
 
     def save_model_service(self, payload: Mapping[str, object]) -> dict[str, object]:
         try:

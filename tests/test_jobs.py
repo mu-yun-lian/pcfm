@@ -6,17 +6,20 @@ import time
 import unittest
 from pathlib import Path
 
+from pcfm.db import Database
 from pcfm.jobs import JobRunner, JobStatus, JobStore
 
 
 class JobRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.store = JobStore(Path(self.tmp.name) / "jobs")
+        self.db = Database(Path(self.tmp.name) / "pcfm.db")
+        self.store = JobStore(self.db)
         self.runner = JobRunner(self.store, max_workers=2)
 
     def tearDown(self) -> None:
         self.runner.shutdown(wait=True)
+        self.db.close()
         self.tmp.cleanup()
 
     def test_success(self) -> None:

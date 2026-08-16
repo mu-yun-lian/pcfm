@@ -49,11 +49,10 @@ class JobCancelled(Exception):
 
 
 class JobStore:
-    """JSON 文件持久化的任务存储。"""
+    """SQLite 持久化的任务存储（job 表由 db.Database 建好）。"""
 
-    def __init__(self, jobs_dir: Path) -> None:
-        self.jobs_dir = Path(jobs_dir)
-        self.jobs_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db) -> None:
+        self._db = db
         self._lock = threading.Lock()
 
     def create(self, type_: str, person_id: str | None) -> Job:
@@ -70,17 +69,25 @@ class JobStore:
             created_at=_now(),
             updated_at=_now(),
         )
-        self._write(job)
+        with self._lock:
+            self._db.conn.execute(
+                "INSERT INTO job (job_id, type, person_id, status, progress, stage, message, error_code, error_message, result, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (job.job_id, job.type, job.person_id, job.status, job.progress, job.stage, job.message, job.error_code, job.error_message, json.dumps(job.result), job.created_at, job.updated_at),
+            )
+            self._db.conn.commit()
         return job
 
     def get(self, job_id: str) -> Job | None:
-        path = self.jobs_dir / f"{job_id}.json"
-        if not path.exists():
+        row = self._db.conn.execute("SELECT * FROM job WHERE job_id=?", (job_id,)).fetchone()
+        if row is None:
             return None
-        try:
-            return Job(**json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError, TypeError):
-            return None
+        return Job(
+            job_id=row["job_id"], type=row["type"], person_id=row["person_id"],
+            status=row["status"], progress=row["progress"], stage=row["stage"],
+            message=row["message"], error_code=row["error_code"], error_message=row["error_message"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+            result=json.loads(row["result"]) if row["result"] else {},
+        )
 
     def update(self, job_id: str, **changes: Any) -> Job | None:
         with self._lock:
@@ -90,16 +97,12 @@ class JobStore:
             for key, value in changes.items():
                 setattr(job, key, value)
             job.updated_at = _now()
-            self._write(job)
+            self._db.conn.execute(
+                "UPDATE job SET status=?, progress=?, stage=?, message=?, error_code=?, error_message=?, result=?, updated_at=? WHERE job_id=?",
+                (job.status, job.progress, job.stage, job.message, job.error_code, job.error_message, json.dumps(job.result), job.updated_at, job.job_id),
+            )
+            self._db.conn.commit()
             return job
-
-    def _write(self, job: Job) -> None:
-        path = self.jobs_dir / f"{job.job_id}.json"
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(
-            json.dumps(asdict(job), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(tmp, path)
 
 
 class JobRunner:

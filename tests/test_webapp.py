@@ -30,6 +30,7 @@ class WebAppTests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
+        self.server.service.close()
         self.temporary.cleanup()
 
     def request(self, path: str, method: str = "GET", payload: object | None = None):

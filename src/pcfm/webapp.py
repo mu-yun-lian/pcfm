@@ -675,6 +675,7 @@ def build_server(
     service = ProductService(data_dir, seed_example=seed_example, seed_demos=seed_demos)
     server = ThreadingHTTPServer((host, port), create_handler(service))
     server.daemon_threads = True
+    server.service = service
     return server
 
 
