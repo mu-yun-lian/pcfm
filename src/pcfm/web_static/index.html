@@ -131,7 +131,9 @@
   <dialog id="model-services-dialog" class="wide-dialog">
     <div class="dialog-card">
       <div class="dialog-head"><div><p class="kicker">每个人物独立选择</p><h2>选择对话模型</h2></div><button type="button" class="close-button" data-close="model-services-dialog">关闭</button></div>
-      <p class="plain-notice">只有通过真实对话调用验证的模型才可选择。直接历史依据可由代码完成；新问题的上下文理解、情境映射和知识补充按需调用模型，并在回答依据中显示次数。</p>
+      <p class="plain-notice">主流模型已预配好地址与协议，你只需粘贴专属 API Key；Key 只存在本机服务端，页面不读回，已配置时以隐藏形式显示。</p>
+      <h3 class="section-title">一键接入主流模型</h3>
+      <div id="quick-providers" class="provider-grid"></div>
       <div class="model-current-row">
         <span id="current-dialogue-model-status">当前人物：未选择对话模型</span>
         <button id="clear-dialogue-model" class="button quiet" type="button">本人物不使用对话模型</button>
