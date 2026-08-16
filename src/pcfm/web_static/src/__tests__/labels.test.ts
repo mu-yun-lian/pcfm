@@ -11,7 +11,7 @@ describe('statusLabel (answer_status -> Chinese)', () => {
   })
 
   it('falls back for unknown / empty values', () => {
-    expect(statusLabel('bogus')).toBe('处理中')
+    expect(statusLabel('bogus')).toBe('未知状态')
     expect(statusLabel('')).toBe('未记录')
     expect(statusLabel(undefined)).toBe('未记录')
     expect(statusLabel(null)).toBe('未记录')
@@ -27,7 +27,7 @@ describe('humanStatus', () => {
   })
 
   it('falls back for unknown / empty values', () => {
-    expect(humanStatus('nope')).toBe('处理中')
+    expect(humanStatus('nope')).toBe('未知状态')
     expect(humanStatus('')).toBe('未记录')
   })
 })

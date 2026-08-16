@@ -20,6 +20,14 @@ const STATUS_LABELS: Record<string, string> = {
   identity: '身份介绍',
   direct_historical: '历史直接依据',
   clarification_needed: '需要澄清',
+  content_contract_gate_failed_bounded_anchor: '内容合同检查未通过，已返回中性回答',
+  generated_from_frozen_v5_content_plan: '已按冻结内容计划生成回答',
+  ordinary_dialogue_content_free: '普通对话（无内容立场）',
+  bounded_anchor_no_dialogue_model: '有界锚点回答（未选择对话模型）',
+  unified_gate_failed: '统一守门未通过',
+  source_verbatim_person_style: '源文逐字人物风格',
+  not_run_no_person_prediction: '未运行（无人物预测）',
+  not_run_refused: '未运行（已拒绝）',
 }
 
 const HUMAN_STATUS_LABELS: Record<string, string> = {
@@ -48,16 +56,24 @@ const HUMAN_STATUS_LABELS: Record<string, string> = {
   final_holdout: '封存最终验证',
   accepted_exploratory: '探索性版本已建立',
   failed_validation: '优化未通过',
+  source_verbatim_person_style: '源文逐字人物风格',
+  not_run_no_person_prediction: '未运行（无人物预测）',
+  not_run_refused: '未运行（已拒绝）',
+  unified_gate_failed: '统一守门未通过',
+  generated_from_frozen_v5_content_plan: '已按冻结内容计划生成回答',
+  ordinary_dialogue_content_free: '普通对话（无内容立场）',
+  bounded_anchor_no_dialogue_model: '有界锚点回答（未选择对话模型）',
+  content_contract_gate_failed_bounded_anchor: '内容合同检查未通过，已返回中性回答',
 }
 
 export function statusLabel(value?: string | null): string {
   if (!value) return '未记录'
-  return STATUS_LABELS[value] || '处理中'
+  return STATUS_LABELS[value] || '未知状态'
 }
 
 export function humanStatus(value?: string | null): string {
   if (!value) return '未记录'
-  return HUMAN_STATUS_LABELS[value] || '处理中'
+  return HUMAN_STATUS_LABELS[value] || '未知状态'
 }
 
 export function shortTime(value?: string | null): string {

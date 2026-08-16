@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import ssl
+import time
 import uuid
 from ctypes import wintypes
 from datetime import datetime, timezone
@@ -448,44 +449,51 @@ class ModelServiceManager:
         url = str(item["base_url"]).rstrip("/") + path
         data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
         request = Request(url, data=data, method=method, headers=headers)
-        try:
-            with urlopen(
-                request,
-                timeout=float(item.get("timeout_seconds", 30)),
-                context=ssl.create_default_context(),
-            ) as response:
-                return dict(json.loads(response.read().decode("utf-8")))
-        except HTTPError as error:
-            base_url = str(item["base_url"])
-            protocol = str(item["protocol"])
-            hint = ""
-            if error.code in {404, 405}:
-                hint = f" 请检查 Base URL 是否正确（当前：{base_url}）。DeepSeek 的 API 地址是 https://api.deepseek.com，不是 https://platform.deepseek.com。"
-            elif error.code == 401:
-                hint = " 请检查 API Key 是否正确。"
-            elif error.code == 429:
-                hint = " 请求频率超限，请稍后重试。"
-            raise ModelServiceError(
-                f"模型服务返回 HTTP {error.code}；未进行自动回退。{hint} 请到模型服务配置检查 Base URL 与 API Key。"
-            ) from error
-        except (URLError, TimeoutError, OSError) as error:
-            base_url = str(item["base_url"])
-            hint = ""
-            if "platform.deepseek" in base_url:
-                hint = " DeepSeek 的 API 地址是 https://api.deepseek.com（不是 platform.deepseek.com）。"
-            elif protocol == "ollama":
-                hint = " 请确认 Ollama 已安装并正在运行（默认端口 11434）。"
-            raise ModelServiceError(
-                f"模型服务连接失败：{type(error).__name__}；未进行自动回退。{hint} 请到模型服务配置检查 Base URL。"
-            ) from error
-        except json.JSONDecodeError as error:
-            base_url = str(item["base_url"])
-            hint = ""
-            if "platform.deepseek" in base_url:
-                hint = " DeepSeek 的 API 地址是 https://api.deepseek.com（不是 platform.deepseek.com）。"
-            raise ModelServiceError(
-                f"模型服务返回了非 JSON 内容（{type(error).__name__}）；未进行自动回退。{hint} 请检查 Base URL 是否指向了 API 而非控制台页面。"
-            ) from error
+        for attempt in (1, 2):
+            try:
+                with urlopen(
+                    request,
+                    timeout=float(item.get("timeout_seconds", 30)),
+                    context=ssl.create_default_context(),
+                ) as response:
+                    return dict(json.loads(response.read().decode("utf-8")))
+            except HTTPError as error:
+                if attempt == 1 and error.code in {429, 500, 502, 503, 504}:
+                    time.sleep(0.5)
+                    continue
+                base_url = str(item["base_url"])
+                protocol = str(item["protocol"])
+                hint = ""
+                if error.code in {404, 405}:
+                    hint = f" 请检查 Base URL 是否正确（当前：{base_url}）。DeepSeek 的 API 地址是 https://api.deepseek.com，不是 https://platform.deepseek.com。"
+                elif error.code == 401:
+                    hint = " 请检查 API Key 是否正确。"
+                elif error.code == 429:
+                    hint = " 请求频率超限，已自动重试一次仍失败。"
+                raise ModelServiceError(
+                    f"模型服务返回 HTTP {error.code}；未进行自动回退。{hint} 请到模型服务配置检查 Base URL 与 API Key。"
+                ) from error
+            except (URLError, TimeoutError, OSError) as error:
+                if attempt == 1:
+                    time.sleep(0.5)
+                    continue
+                base_url = str(item["base_url"])
+                hint = ""
+                if "platform.deepseek" in base_url:
+                    hint = " DeepSeek 的 API 地址是 https://api.deepseek.com（不是 platform.deepseek.com）。"
+                elif protocol == "ollama":
+                    hint = " 请确认 Ollama 已安装并正在运行（默认端口 11434）。"
+                raise ModelServiceError(
+                    f"模型服务连接失败：{type(error).__name__}；未进行自动回退。{hint} 请到模型服务配置检查 Base URL。"
+                ) from error
+            except json.JSONDecodeError as error:
+                base_url = str(item["base_url"])
+                hint = ""
+                if "platform.deepseek" in base_url:
+                    hint = " DeepSeek 的 API 地址是 https://api.deepseek.com（不是 platform.deepseek.com）。"
+                raise ModelServiceError(
+                    f"模型服务返回了非 JSON 内容（{type(error).__name__}）；未进行自动回退。{hint} 请检查 Base URL 是否指向了 API 而非控制台页面。"
+                ) from error
 
     def refresh_models(self, service_id: str) -> list[str]:
         item = self._private(service_id)
