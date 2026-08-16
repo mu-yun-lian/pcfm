@@ -233,15 +233,19 @@ class AssistantEngine:
             person_name=query,
             identity_note=str(person.get("identity_note", "")),
             language="zh",
-            limit=5,
+            limit=10,
         )
         if not results:
             return "没搜到结果。"
+        lines = []
         added = 0
         for r in results:
+            title = str(r.get("title", "")).strip() or str(r.get("url", ""))
             url = str(r.get("url", "")).strip()
+            snippet = str(r.get("snippet", "")).strip()
             if not url:
                 continue
+            fetched = False
             try:
                 self.service.add_conversation_url_source(
                     pid,
@@ -250,15 +254,36 @@ class AssistantEngine:
                     dataset_role="reference_only",
                     content_authenticity="unverified_material",
                     source_locator="web_search",
-                    source_context="联网搜索抓取；尚未确认说话人。",
+                    source_context="联网搜索抓取原文；尚未确认说话人。",
                 )
-                added += 1
+                fetched = True
             except Exception:
-                continue
-        return (
-            "搜索到 %d 条结果，已抓取 %d 篇原文加入候选（reference_only，未核实说话人）。"
-            "可到该人物「人物资料」里审核确认。"
-        ) % (len(results), added)
+                fetched = False
+            if not fetched and snippet:
+                try:
+                    self.service.add_conversation_text_source(
+                        pid,
+                        title=title,
+                        text=snippet,
+                        speaker="",
+                        source_date=str(r.get("published_at", "")),
+                        dataset_role="reference_only",
+                        content_authenticity="search_snippet",
+                        source_locator="web_search",
+                        source_url=url,
+                        source_context="联网搜索摘要；尚未确认说话人。",
+                    )
+                    added += 1
+                    lines.append("· %s（摘要）" % title)
+                    continue
+                except Exception:
+                    continue
+            if fetched:
+                added += 1
+                lines.append("· %s（原文）" % title)
+        if not added:
+            return "搜索到 %d 条，但都没能抓取。" % len(results)
+        return "搜索到 %d 条，已加入 %d 篇候选：\n%s" % (len(results), added, "\n".join(lines))
 
     def _process_materials(self, pid):
         """确认来源 → 提取候选 → 确认候选；每确认一条候选自动生成模型版本。"""
