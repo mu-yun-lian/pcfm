@@ -604,6 +604,17 @@ function stopProgressPolling() {
   if (el) { el.hidden = true; const fill = $("#processing-progress-fill"); if (fill) fill.style.width = "0%"; }
 }
 
+async function pollJob(jobId) {
+  while (true) {
+    const data = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
+    const job = data.job;
+    if (job.status === "succeeded") return job;
+    if (job.status === "failed") throw new Error(job.error_message || "任务失败");
+    if (job.status === "cancelled") throw new Error("任务已取消");
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
 async function processAllMaterials() {
   if (!state.person) return;
   const button = $("#process-all-materials");
@@ -619,7 +630,8 @@ async function processAllMaterials() {
     await refreshConversation();
     for (const source of state.conversation.sources) {
       if (source.review_status === "confirmed" && !(source.llm_response_event_candidates || []).length) {
-        await api(`${base}/${encodeURIComponent(source.source_id)}/extract-candidates`, {method:"POST", body:"{}"});
+        const extractRes = await api(`${base}/${encodeURIComponent(source.source_id)}/extract-candidates`, {method:"POST", body:"{}"});
+        await pollJob(extractRes.job_id);
       }
     }
     await refreshConversation();

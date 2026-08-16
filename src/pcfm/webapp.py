@@ -87,8 +87,12 @@ def create_handler(service: ProductService):
                         }
                     )
                     return
-                if False:
-                    self._send_json({"ok": True, "product": "PCFM 对话式人物模拟 MVP v0.3"})
+                if len(parts) == 3 and parts[:2] == ["api", "jobs"]:
+                    job = service.get_job(parts[2])
+                    if job is None:
+                        self._send_json({"ok": False, "message": "任务不存在。"}, HTTPStatus.NOT_FOUND)
+                    else:
+                        self._send_json({"ok": True, "job": job})
                     return
                 if parts == ["api", "expression", "profile"]:
                     self._send_json(
@@ -214,6 +218,10 @@ def create_handler(service: ProductService):
                 if parts == ["api", "assistant", "model"]:
                     state = service.assistant.set_model(str(body.get("model_ref", "")))
                     self._send_json({"ok": True, "assistant": {"reply": "已设置助手模型。", "state": state}})
+                    return
+                if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "cancel":
+                    cancelled = service.cancel_job(parts[2])
+                    self._send_json({"ok": True, "cancelled": cancelled})
                     return
                 if len(parts) == 4 and parts[:2] == ["api", "people"] and parts[3] == "avatar":
                     person = service.set_avatar(parts[2], str(body.get("avatar", "")))
@@ -354,8 +362,12 @@ def create_handler(service: ProductService):
                         )
                         return
                     if action == ["conversation", "search"]:
-                        result = service.collect_public_sources(person_id)
-                        self._send_json({"ok": True, "collection": result})
+                        job = service.job_runner.submit(
+                            "public_search",
+                            person_id,
+                            lambda progress=None, cancel=None: service.collect_public_sources(person_id),
+                        )
+                        self._send_json({"ok": True, "job_id": job.job_id})
                         return
                     if (
                         len(action) == 4
@@ -372,10 +384,12 @@ def create_handler(service: ProductService):
                         and action[:2] == ["conversation", "sources"]
                         and action[3] == "extract-candidates"
                     ):
-                        result = service.extract_conversation_response_candidates(
-                            person_id, action[2]
+                        job = service.job_runner.submit(
+                            "extract_candidates",
+                            person_id,
+                            lambda progress=None, cancel=None: service.extract_conversation_response_candidates(person_id, action[2]),
                         )
-                        self._send_json({"ok": True, "source": result})
+                        self._send_json({"ok": True, "job_id": job.job_id})
                         return
                     if (
                         len(action) == 6
