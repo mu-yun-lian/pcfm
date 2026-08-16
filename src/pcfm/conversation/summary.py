@@ -119,11 +119,11 @@ class SummaryMixin:
         profile = self.profile(person_id)
         sources = self._list(person_id, "conversation_sources.json")
         state = self._state(person_id)
-        versions = self._list(person_id, "conversation_versions.json")
+        versions = [] if light else self._list(person_id, "conversation_versions.json")
         session_id = self._active_session_id(person_id)
         session = self._read_session(person_id, session_id)
         messages = [dict(item) for item in session.get("messages", [])]
-        candidates = self._list(person_id, "optimization_candidates.json")
+        candidates = [] if light else self._list(person_id, "optimization_candidates.json")
         confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
         active = state.get("active_version")
         if light:
@@ -161,7 +161,7 @@ class SummaryMixin:
                 else "尚未建立人物模型；普通问题可由所选大模型以通用模式回答"
             ),
             "messages": messages,
-            "sources": [self._source_public(item) for item in sources],
+            "sources": [] if light else [self._source_public(item) for item in sources],
             "source_counts": {
                 "total": len(sources),
                 "confirmed": len(confirmed),

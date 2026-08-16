@@ -107,7 +107,7 @@ class SourceServiceMixin:
         speaker_scope: str = "single_speaker_entire_document",
         entity_aliases: Sequence[str] = (),
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.add_text_source,
@@ -141,7 +141,7 @@ class SourceServiceMixin:
         source_context: str = "",
         speaker_scope: str = "single_speaker_entire_document",
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.add_file_source,
@@ -170,7 +170,7 @@ class SourceServiceMixin:
         source_context: str = "",
         speaker_scope: str = "single_speaker_entire_document",
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.add_url_source,
@@ -188,7 +188,7 @@ class SourceServiceMixin:
     def review_conversation_source(
         self, person_id: str, source_id: str, decision: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.review_source, person_id, source_id, decision

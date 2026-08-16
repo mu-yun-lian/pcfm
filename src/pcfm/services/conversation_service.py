@@ -77,39 +77,39 @@ class ConversationServiceMixin:
             return self.get_person(person_id)
 
     def conversation_summary(self, person_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.summary, person_id)
 
     def start_new_conversation(self, person_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.start_new_conversation, person_id
             )
 
     def list_sessions(self, person_id: str) -> list[dict[str, object]]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.list_sessions, person_id)
 
     def create_session(self, person_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.create_session, person_id)
 
     def switch_session(self, person_id: str, session_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.switch_session, person_id, session_id)
 
     def rename_session(self, person_id: str, session_id: str, title: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.rename_session, person_id, session_id, title)
 
     def delete_session(self, person_id: str, session_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(self.conversation.delete_session, person_id, session_id)
 
@@ -138,7 +138,7 @@ class ConversationServiceMixin:
     def find_conversation_reality_answer(
         self, person_id: str, message_id: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.find_reality_answer, person_id, message_id
@@ -152,7 +152,7 @@ class ConversationServiceMixin:
         allow_retry: bool = False,
         comparison_candidate_id: str = "",
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.create_optimization_candidate,
@@ -165,7 +165,7 @@ class ConversationServiceMixin:
     def review_optimization_candidate(
         self, person_id: str, candidate_id: str, decision: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.review_optimization_candidate,
@@ -177,7 +177,7 @@ class ConversationServiceMixin:
     def review_optimization_style_candidate(
         self, person_id: str, candidate_id: str, decision: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.review_optimization_style_candidate,
@@ -189,7 +189,7 @@ class ConversationServiceMixin:
     def record_conversation_feedback(
         self, person_id: str, message_id: str, value: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.feedback, person_id, message_id, value
