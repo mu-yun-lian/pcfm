@@ -151,6 +151,15 @@ def create_handler(service: ProductService):
                     self.end_headers()
                     self.wfile.write(rendered)
                     return
+                if len(parts) == 4 and parts[:2] == ["api", "people"] and parts[3] == "avatar":
+                    content, mime = service.get_avatar(parts[2])
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Content-Length", str(len(content)))
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
                 self._serve_static(parts)
             except Exception as error:
                 self._error(error)
@@ -187,6 +196,10 @@ def create_handler(service: ProductService):
                 if parts == ["api", "assistant", "model"]:
                     state = service.assistant.set_model(str(body.get("model_ref", "")))
                     self._send_json({"ok": True, "assistant": {"reply": "已设置助手模型。", "state": state}})
+                    return
+                if len(parts) == 4 and parts[:2] == ["api", "people"] and parts[3] == "avatar":
+                    person = service.set_avatar(parts[2], str(body.get("avatar", "")))
+                    self._send_json({"ok": True, "person": person})
                     return
                 if parts == ["api", "conversation", "people"]:
                     person = service.create_conversation_person(

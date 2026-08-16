@@ -583,15 +583,16 @@ async function submitUrlSource(event) {
 }
 
 function openPersonDialog(editing = false) {
-  state.editingPerson = editing;
+  state.editingPerson = true;
   const form=$("#person-form"); form.reset();
-  if (editing && state.person) {
+  if (state.person) {
     form.elements.name.value=state.person.name; form.elements.description.value=state.person.description||"";
     form.elements.language.value=state.conversation.profile.language; form.elements.aliases.value=(state.conversation.profile.aliases||[]).join(", ");
-    form.elements.source_mode.value=state.person.collection?.mode||"user_provided"; form.elements.identity_note.value=state.person.identity_note||"";
-    form.elements.focus_domain.value=state.person.focus_domain||""; form.elements.avatar.value=state.person.avatar||""; form.elements.notes.value=state.person.notes||"";
+    form.elements.identity_note.value=state.person.identity_note||"";
+    form.elements.focus_domain.value=state.person.focus_domain||"";
   }
-  $("#person-dialog h2").textContent=editing?"编辑人物":"新建人物"; $("#person-dialog").showModal();
+  $("#person-avatar-preview").src = state.person?.avatar || "/default-person-avatar.png";
+  $("#person-dialog").showModal();
 }
 
 function configureSearchCapability(capabilities = {}) {
@@ -612,20 +613,45 @@ function configureSearchCapability(capabilities = {}) {
 async function submitPerson(event) {
   event.preventDefault(); const form=event.currentTarget,button=event.submitter; busy(button,true);
   try {
-    const body={name:form.elements.name.value,description:form.elements.description.value,aliases:form.elements.aliases.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),language:form.elements.language.value,time_start:form.elements.time_start.value,time_end:form.elements.time_end.value,source_mode:form.elements.source_mode.value,identity_note:form.elements.identity_note.value,focus_domain:form.elements.focus_domain.value,avatar:form.elements.avatar.value,notes:form.elements.notes.value};
-    let personId;
-    if (state.editingPerson) { await api(`/api/people/${encodeURIComponent(state.person.person_id)}`,{method:"PUT",body:JSON.stringify(body)}); personId=state.person.person_id; }
-    else { const data=await api("/api/conversation/people",{method:"POST",body:JSON.stringify(body)}); personId=data.person.person_id; }
-    $("#person-dialog").close(); state.person=null; await loadPeople(personId);
-    if (!state.editingPerson && body.source_mode === "system_search") {
-      const collection = state.person?.collection || {};
-      toast(collection.message || "公开资料搜索已结束；所有结果都需要核验后才能训练。", collection.status === "temporarily_unavailable");
-      return;
-    }
-    if (state.editingPerson) toast("人物信息已更新。");
-    else if (body.source_mode==="system_search") toast("人物已创建；当前搜索服务未配置，系统没有伪造收集结果。");
-    else { toast("人物已创建；下一步请添加原始资料。"); $("#sources-dialog").showModal(); }
+    const body={name:form.elements.name.value,description:form.elements.description.value,aliases:form.elements.aliases.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),language:form.elements.language.value,identity_note:form.elements.identity_note.value,focus_domain:form.elements.focus_domain.value};
+    await api(`/api/people/${encodeURIComponent(state.person.person_id)}`,{method:"PUT",body:JSON.stringify(body)});
+    $("#person-dialog").close(); await loadPeople(state.person.person_id);
+    toast("人物信息已更新。");
   } catch(error){toast(error.message,true)} finally{busy(button,false)}
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadAvatar(file) {
+  if (!file || !state.person) return;
+  if (!/^image\//.test(file.type)) { toast("请选择图片文件。", true); return; }
+  if (file.size > 2 * 1024 * 1024) { toast("头像图片不能超过 2 MB。", true); return; }
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    await api(`/api/people/${encodeURIComponent(state.person.person_id)}/avatar`, {method:"POST", body: JSON.stringify({avatar: dataUrl})});
+    $("#person-avatar-preview").src = dataUrl;
+    state.person.avatar = `/api/people/${state.person.person_id}/avatar`;
+    await loadPeople(state.person.person_id);
+    toast("头像已更新。");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function removeAvatar() {
+  if (!state.person) return;
+  try {
+    await api(`/api/people/${encodeURIComponent(state.person.person_id)}/avatar`, {method:"POST", body: JSON.stringify({avatar: ""})});
+    $("#person-avatar-preview").src = "/default-person-avatar.png";
+    state.person.avatar = "";
+    await loadPeople(state.person.person_id);
+    toast("已移除头像。");
+  } catch (error) { toast(error.message, true); }
 }
 
 async function importBackup(file) {
@@ -885,7 +911,7 @@ function wire() {
   $("#material-model-role").onchange=event=>setModelRole("material_processing",event.target.value);
   $("#close-drawer").onclick=closeDrawer;
   $$('[data-close]').forEach(button=>button.onclick=()=>$("#"+button.dataset.close).close());
-  $("#person-form").onsubmit=submitPerson; $("#paste-source-form").onsubmit=submitTextSource; $("#file-source-form").onsubmit=submitFileSource; $("#url-source-form").onsubmit=submitUrlSource;
+  $("#person-form").onsubmit=submitPerson; $("#paste-source-form").onsubmit=submitTextSource; $("#avatar-upload-btn").onclick=()=>$("#avatar-file-input").click(); $("#avatar-file-input").onchange=e=>e.target.files[0]&&uploadAvatar(e.target.files[0]); $("#avatar-remove-btn").onclick=removeAvatar; const az=$("#avatar-drop-zone"); az.ondragover=e=>{e.preventDefault();az.classList.add("dragover")}; az.ondragleave=()=>az.classList.remove("dragover"); az.ondrop=e=>{e.preventDefault();az.classList.remove("dragover");const f=e.dataTransfer.files[0];f&&uploadAvatar(f)}; $("#file-source-form").onsubmit=submitFileSource; $("#url-source-form").onsubmit=submitUrlSource;
   $("#import-backup").onclick=()=>$("#backup-file").click(); $("#backup-file").onchange=event=>event.target.files[0]&&importBackup(event.target.files[0]);
 }
 

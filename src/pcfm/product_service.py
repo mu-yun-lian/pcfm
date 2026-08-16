@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import copy
 import hashlib
@@ -1010,6 +1011,51 @@ class ProductService:
             person["archived_at"] = _utc_now()
             _write_json(directory / "person.json", person)
             directory.rename(target)
+
+    def set_avatar(self, person_id: str, data_url: str) -> dict[str, object]:
+        """保存人物头像（本地文件），data_url 形如 data:image/png;base64,...；传空则移除。"""
+        with self._lock:
+            person = self._require_person(person_id)
+            if not str(data_url).strip():
+                for old_ext in ("png", "jpg", "jpeg", "webp", "gif"):
+                    old = self._person_dir(person_id) / f"avatar.{old_ext}"
+                    if old.exists():
+                        old.unlink(missing_ok=True)
+                person["avatar"] = ""
+                person["updated_at"] = _utc_now()
+                _write_json(self._person_path(person_id), person)
+                return self.get_person(person_id)
+            header = "image/png"
+            encoded = str(data_url).strip()
+            if "," in encoded:
+                header, encoded = encoded.split(",", 1)
+                header = header.split(":")[1].split(";")[0] if ":" in header else "image/png"
+            try:
+                raw = base64.b64decode(encoded)
+            except Exception as error:
+                raise ProductError("头像数据无效。") from error
+            if len(raw) > 2 * 1024 * 1024:
+                raise ProductError("头像图片不能超过 2 MB。")
+            ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}.get(header, "png")
+            for old_ext in ("png", "jpg", "jpeg", "webp", "gif"):
+                old = self._person_dir(person_id) / f"avatar.{old_ext}"
+                if old.exists() and old_ext != ext:
+                    old.unlink(missing_ok=True)
+            path = self._person_dir(person_id) / f"avatar.{ext}"
+            path.write_bytes(raw)
+            person["avatar"] = f"/api/people/{person_id}/avatar"
+            person["updated_at"] = _utc_now()
+            _write_json(self._person_path(person_id), person)
+            return self.get_person(person_id)
+
+    def get_avatar(self, person_id: str) -> tuple[bytes, str]:
+        """返回头像字节与 MIME；无头像时抛 ProductError。"""
+        person = self._require_person(person_id)
+        for ext, mime in (("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("webp", "image/webp"), ("gif", "image/gif")):
+            path = self._person_dir(person_id) / f"avatar.{ext}"
+            if path.exists():
+                return path.read_bytes(), mime
+        raise ProductError("该人物还没有头像。")
 
     def list_archived_people(self) -> list[dict[str, object]]:
         with self._lock:
