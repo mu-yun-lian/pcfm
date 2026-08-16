@@ -77,6 +77,22 @@ class JobStore:
             self._db.conn.commit()
         return job
 
+    def recover_stale(self) -> int:
+        """启动时把上次进程遗留的 queued/running 任务标记为 failed。"""
+        if not self._db.path.exists():
+            return 0
+        with self._lock:
+            rows = self._db.conn.execute(
+                "SELECT job_id FROM job WHERE status IN ('queued','running')"
+            ).fetchall()
+            for row in rows:
+                self._db.conn.execute(
+                    "UPDATE job SET status='failed', error_message='服务重启，任务已失效', updated_at=? WHERE job_id=?",
+                    (_now(), row["job_id"]),
+                )
+            self._db.conn.commit()
+            return len(rows)
+
     def get(self, job_id: str) -> Job | None:
         row = self._db.conn.execute("SELECT * FROM job WHERE job_id=?", (job_id,)).fetchone()
         if row is None:

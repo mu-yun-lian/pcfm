@@ -705,6 +705,7 @@ def main() -> None:
         seed_example=args.seed_example and not args.no_seed,
         seed_demos=args.seed_demos,
     )
+    server.service.job_store.recover_stale()
     address = f"http://{args.host}:{server.server_address[1]}"
     print("PCFM 对话式人物模拟 MVP v0.10.0 已经启动。")
     print(f"访问地址：{address}")

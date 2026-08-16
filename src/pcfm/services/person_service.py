@@ -112,7 +112,7 @@ class PersonServiceMixin:
                             "style_profile_id": conversation["profile"]["style_profile_id"],
                         }
                     )
-                except Exception:
+                except (ProductError, ConversationError, PcfmDataError, CognitiveWorkbenchError):
                     result.append({
                         "person_id": dir_id,
                         "name": "（数据损坏）",
