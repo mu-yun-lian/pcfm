@@ -588,6 +588,7 @@ class SimulationV4ProductIntegrationTests(unittest.TestCase):
         self.service.conversation._model_services = SemanticMaterialModel()
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def _add_reviewed_event(self, title: str, text: str, date: str) -> None:
