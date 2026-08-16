@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..jobs import JobCancelled
+
 from ._shared import *  # noqa: F401, F403
 from ._shared import (  # noqa: F401
     _canonical_hash,
@@ -31,11 +33,19 @@ class MessagePipelineMixin:
         *,
         reality_lookup_requested: bool = False,
         dialogue_model_ref: str = "",
+        cancel_event: object = None,
+        progress: object = None,
     ) -> dict[str, object]:
         self.profile(person_id)
+
+        def _check_cancel() -> None:
+            if cancel_event is not None and cancel_event.is_set():
+                raise JobCancelled()
+
         clean = str(text).strip()
         if not clean:
             raise ConversationError("请输入消息。")
+        _check_cancel()
         messages = self._active_messages(person_id)
         prior_messages = copy.deepcopy(messages)
         profile = self.profile(person_id)
@@ -57,6 +67,8 @@ class MessagePipelineMixin:
             "created_at": _utc_now(),
         }
         messages.append(user_message)
+        # 尽早持久化用户消息：即使生成被取消，用户消息也保留
+        self._save_active_messages(person_id, messages)
         telemetry = self._telemetry(person_id)
         telemetry["content_retrieval_calls"] += 1
         telemetry["content_prediction_calls"] += 1
@@ -257,6 +269,7 @@ class MessagePipelineMixin:
                     "status": "used" if generation_calls else "not_selected",
                     "fallback_used": False,
                 }
+                _check_cancel()
                 messages.append(base)
                 self._save_active_messages(person_id, messages, dialogue_state=self._conversation_context(profile, messages, ""))
                 return copy.deepcopy(base)
@@ -572,6 +585,7 @@ class MessagePipelineMixin:
             ),
             "fallback_used": False,
         }
+        _check_cancel()
         messages.append(base)
         self._save_active_messages(person_id, messages, dialogue_state=self._conversation_context(profile, messages, ""))
         return copy.deepcopy(base)

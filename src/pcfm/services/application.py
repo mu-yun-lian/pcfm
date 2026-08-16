@@ -101,8 +101,8 @@ class PcfmService(
                 self._conversation_call(
                     self.conversation.migrate_evidence_contract, path.parent.name
                 )
-            except ProductError:
-                # 单个人物迁移失败不阻断启动
+            except Exception:
+                # 单个人物迁移失败(含 conversation 数据损坏)不阻断启动
                 continue
 
     def _refresh_demo_metadata(self) -> None:

@@ -337,10 +337,11 @@ export const useAppStore = defineStore('app', {
 
     async extractSource(sourceId: string) {
       if (!this.person) return
-      await api(
+      const data = await api<{ job_id: string }>(
         '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/' + encodeURIComponent(sourceId) + '/extract-candidates',
         { method: 'POST', body: '{}' },
       )
+      await pollJob(data.job_id)
       await this.refreshConversation()
       this.showToast('候选已生成，仍需逐条核对原文位置后才能进入模型。')
     },

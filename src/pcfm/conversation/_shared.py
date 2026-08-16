@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from ..persistence.atomic import atomic_write_json
+from ..data_errors import PcfmDataError, safe_read_json
 from ..expression_renderer import (
     ExpressionRenderer,
     ExpressionRendererError,
@@ -126,7 +127,10 @@ def _write_json(path: Path, value: object) -> None:
 def _read_json(path: Path, default: object) -> object:
     if not path.exists():
         return copy.deepcopy(default)
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return safe_read_json(path, default)
+    except PcfmDataError as error:
+        raise ConversationError(str(error)) from error
 
 
 def _extract_pdf(value: bytes) -> str:

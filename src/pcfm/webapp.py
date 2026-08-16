@@ -431,6 +431,7 @@ def create_handler(service: PcfmService):
                                 dialogue_model_ref=str(
                                     body.get("dialogue_model_ref", "")
                                 ),
+                                _cancel_event=cancel,
                             ),
                         )
                         self._send_json(

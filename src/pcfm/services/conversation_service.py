@@ -120,6 +120,8 @@ class ConversationServiceMixin:
         *,
         reality_lookup_requested: bool = False,
         dialogue_model_ref: str = "",
+        _cancel_event: object = None,
+        _progress: object = None,
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
@@ -129,6 +131,8 @@ class ConversationServiceMixin:
                 text,
                 reality_lookup_requested=reality_lookup_requested,
                 dialogue_model_ref=dialogue_model_ref,
+                cancel_event=_cancel_event,
+                progress=_progress,
             )
 
     def find_conversation_reality_answer(
