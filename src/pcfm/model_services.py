@@ -36,6 +36,54 @@ class ModelServiceError(ValueError):
     pass
 
 
+def _first_text_from_openai(payload: object) -> str:
+    try:
+        if not isinstance(payload, dict):
+            raise ValueError
+        choices = payload["choices"]
+        if not isinstance(choices, list) or not choices:
+            raise ValueError
+        first = choices[0]
+        if not isinstance(first, dict):
+            raise ValueError
+        message = first["message"]
+        if not isinstance(message, dict):
+            raise ValueError
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise ValueError
+        return content
+    except (KeyError, ValueError, TypeError):
+        raise ModelServiceError("模型服务返回数据格式异常，请检查模型服务类型和 Base URL。")
+
+
+def _first_text_from_anthropic(payload: object) -> str:
+    try:
+        if not isinstance(payload, dict):
+            raise ValueError
+        content = payload["content"]
+        if not isinstance(content, list) or not content:
+            raise ValueError
+        return "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+    except (KeyError, ValueError, TypeError):
+        raise ModelServiceError("Anthropic 服务返回数据格式异常。")
+
+
+def _first_text_from_gemini(payload: object) -> str:
+    try:
+        if not isinstance(payload, dict):
+            raise ValueError
+        candidates = payload["candidates"]
+        if not isinstance(candidates, list) or not candidates:
+            raise ValueError
+        parts = candidates[0]["content"]["parts"]
+        if not isinstance(parts, list) or not parts:
+            raise ValueError
+        return str(parts[0].get("text", ""))
+    except (KeyError, ValueError, TypeError):
+        raise ModelServiceError("Gemini 服务返回数据格式异常。")
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z"
@@ -597,7 +645,7 @@ class ModelServiceManager:
             text = ""
             for _attempt in range(3):
                 payload = self._json_request(item, "/chat/completions", method="POST", body=body)
-                text = str(payload["choices"][0]["message"]["content"])
+                text = _first_text_from_openai(payload)
                 if text.strip():
                     break
         elif protocol == "ollama":
@@ -617,13 +665,13 @@ class ModelServiceManager:
                 method="POST",
                 body={"model": resolved_model, "max_tokens": token_limit, "temperature": float(temperature), "system": system, "messages": turns},
             )
-            text = "".join(str(value.get("text", "")) for value in payload.get("content", []))
+            text = _first_text_from_anthropic(payload)
         elif protocol == "gemini":
             api_key = self._api_key(item)
             path = f"/models/{quote(resolved_model)}:generateContent" + (f"?key={quote(api_key)}" if api_key else "")
             prompt = "\n\n".join(f"{value.get('role')}: {value.get('content')}" for value in messages)
             payload = self._json_request(item, path, method="POST", body={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": float(temperature), "maxOutputTokens": token_limit, "responseMimeType": "application/json" if structured else "text/plain"}})
-            text = str(payload["candidates"][0]["content"]["parts"][0]["text"])
+            text = _first_text_from_gemini(payload)
         else:
             raise ModelServiceError("该自定义协议没有可执行调用路径。")
         if not text.strip():

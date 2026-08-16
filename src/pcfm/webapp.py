@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import mimetypes
 import threading
+import uuid
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from .logging_config import setup_logging
 from .product_service import ProductError, ProductService
 
 
 STATIC_DIR = Path(__file__).with_name("web_static")
-APP_VERSION = "0.10.0-simulation-v5"
+from . import APP_VERSION
 DEFAULT_DATA_DIR = Path.home() / "PCFM人物对话系统数据"
 
 
@@ -40,8 +43,8 @@ def create_handler(service: ProductService):
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError as error:
                 raise ProductError("请求长度无效。") from error
-            if length > 25 * 1024 * 1024:
-                raise ProductError("导入文件超过 25 MB。")
+            if length > 40 * 1024 * 1024:
+                raise ProductError("提交内容过大。单个文件最大 25 MB，请压缩后重试。")
             try:
                 value = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -54,14 +57,22 @@ def create_handler(service: ProductService):
             return [unquote(part) for part in urlparse(self.path).path.split("/") if part]
 
         def _error(self, error: Exception) -> None:
+            request_id = getattr(self, "request_id", None) or f"req_{uuid.uuid4().hex[:12]}"
+            self.request_id = request_id
             if isinstance(error, ProductError):
                 self._send_json({"ok": False, "message": str(error)}, HTTPStatus.BAD_REQUEST)
             else:
+                logging.getLogger("pcfm").exception(
+                    "unhandled error request_id=%s path=%s", request_id, self.path
+                )
                 self._send_json(
-                    {"ok": False, "message": "本地应用发生错误，请查看启动窗口。"},
+                    {
+                        "ok": False,
+                        "message": "本地应用发生错误，请重启服务。",
+                        "request_id": request_id,
+                    },
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
-                print(f"PCFM web error: {type(error).__name__}: {error}")
 
         def do_GET(self) -> None:
             try:
@@ -644,7 +655,7 @@ def build_server(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="PCFM 对话式人物模拟 MVP v0.3")
+    parser = argparse.ArgumentParser(description="PCFM 对话式人物模拟 MVP v0.10.0")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
@@ -653,6 +664,7 @@ def main() -> None:
     parser.add_argument("--seed-demos", action="store_true")
     parser.add_argument("--no-seed", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    setup_logging(args.data_dir / "logs")
     server = build_server(
         args.host,
         args.port,
@@ -661,7 +673,7 @@ def main() -> None:
         seed_demos=args.seed_demos,
     )
     address = f"http://{args.host}:{server.server_address[1]}"
-    print("PCFM 对话式人物模拟 MVP v0.3 已经启动。")
+    print("PCFM 对话式人物模拟 MVP v0.10.0 已经启动。")
     print(f"访问地址：{address}")
     print(f"本地数据：{args.data_dir.resolve()}")
     print("关闭本窗口即可停止应用。")

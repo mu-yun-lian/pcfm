@@ -67,9 +67,10 @@ function resetComposer(nextId) {
 function personById(id) { return state.people.find(item => item.person_id === id); }
 function currentName() { return state.person?.name || personById(state.person?.person_id)?.name || "当前人物"; }
 function shortTime(value) { try { return new Date(value).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}); } catch { return ""; } }
-function statusLabel(value) { return ({exploratory:"探索性人物模拟",insufficient_evidence:"尚未建立人物模型",answered:"已回答",needs_model:"需要选择对话模型",refused:"已拒绝强行预测",clarification:"需要澄清",ordinary_dialogue:"普通对话",direct_answer:"历史直接依据",similar_event_evidence_answer:"相似历史事件依据",preference_structure_answer:"公开取舍结构推断",orientation_projection_answer:"结合上下文的公开取向预测",general_assisted:"通用知识回答（非人物预测）",object_evaluation:"人物对象评价",self_evaluation:"人物自我评价",policy_stance:"人物政策立场",factual:"人物事实判断",identity:"身份介绍",direct_historical:"历史直接依据",clarification_needed:"需要澄清"})[value] || value; }
+function statusLabel(value) { if (!value) return "未记录"; return ({exploratory:"探索性人物模拟",insufficient_evidence:"尚未建立人物模型",answered:"已回答",needs_model:"需要选择对话模型",refused:"已拒绝强行预测",clarification:"需要澄清",ordinary_dialogue:"普通对话",direct_answer:"历史直接依据",similar_event_evidence_answer:"相似历史事件依据",preference_structure_answer:"公开取舍结构推断",orientation_projection_answer:"结合上下文的公开取向预测",general_assisted:"通用知识回答（非人物预测）",object_evaluation:"人物对象评价",self_evaluation:"人物自我评价",policy_stance:"人物政策立场",factual:"人物事实判断",identity:"身份介绍",direct_historical:"历史直接依据",clarification_needed:"需要澄清"})[value] || "处理中"; }
 
 function humanStatus(value) {
+  if (!value) return "未记录";
   return ({
     not_assessed:"尚未验证", not_applied:"当前未启用", structural_gate_only:"仅完成结构检查",
     implemented_not_independently_measured:"已实现，但缺少独立测试",
@@ -89,7 +90,7 @@ function humanStatus(value) {
     pending:"待审核", confirmed:"已确认", rejected:"已拒绝",
     model_source:"参数训练", reference_only:"仅参考", final_holdout:"封存最终验证",
     accepted_exploratory:"探索性版本已建立", failed_validation:"优化未通过",
-  })[value] || value;
+  })[value] || "处理中";
 }
 
 function enabledModelOptions() {
@@ -680,7 +681,7 @@ async function submitTextSource(event) {
   catch(error){toast(error.message,true)} finally{busy(button,false)}
 }
 
-function fileToBase64(file) { return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result).split(",")[1]); reader.onerror=()=>reject(reader.error); reader.readAsDataURL(file); }); }
+function fileToBase64(file) { const MAX_FILE_BYTES = 25 * 1024 * 1024; if (file.size > MAX_FILE_BYTES) { return Promise.reject(new Error("单个文件不能超过 25 MB。")); } return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result).split(",")[1]); reader.onerror=()=>reject(reader.error); reader.readAsDataURL(file); }); }
 async function submitFileSource(event) {
   event.preventDefault(); const form=event.currentTarget,button=event.submitter,file=form.elements.file.files[0]; busy(button,true,"提取中…");
   try { const content_base64=await fileToBase64(file); const fields=Object.fromEntries(new FormData(form)); await api(`/api/people/${encodeURIComponent(state.person.person_id)}/conversation/sources/file`,{method:"POST",body:JSON.stringify({...fields,filename:file.name,content_base64,source_date:""})}); form.elements.file.value=""; toast("文件已按事件候选整理并进入待审核队列。"); await refreshConversation(); }

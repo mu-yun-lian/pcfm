@@ -20,6 +20,7 @@ import numpy as np
 
 from .applicability import PredictionRefusedError
 from .assistant import AssistantEngine
+from .data_errors import PcfmDataError, safe_read_json
 from .contracts import Observation, Scenario
 from .cognitive_workbench import (
     CognitiveWorkbench,
@@ -119,11 +120,10 @@ def _write_json(path: Path, value: object) -> None:
 
 
 def _read_json(path: Path, default: object | None = None) -> object:
-    if not path.exists():
-        if default is not None:
-            return default
-        raise ProductError(f"本地文件不存在：{path.name}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return safe_read_json(path, default)
+    except PcfmDataError as error:
+        raise ProductError(str(error)) from error
 
 
 def _slug(value: str) -> str:
@@ -187,6 +187,8 @@ class ProductService:
             _write_json(self.expression_records_path, [])
         self.assistant = AssistantEngine(self, self.data_dir / "assistant_state.json")
         self._lock = threading.RLock()
+        self._locks_guard = threading.Lock()
+        self._person_locks: dict[str, threading.RLock] = {}
         if seed_example and not any(self.people_dir.iterdir()):
             self._seed_example()
         if seed_example:
@@ -206,9 +208,13 @@ class ProductService:
         if seed_demos:
             self._refresh_demo_sources()
         for path in sorted(self.people_dir.glob("*/person.json")):
-            self._conversation_call(
-                self.conversation.migrate_evidence_contract, path.parent.name
-            )
+            try:
+                self._conversation_call(
+                    self.conversation.migrate_evidence_contract, path.parent.name
+                )
+            except ProductError:
+                # 单个人物迁移失败不阻断启动
+                continue
 
     def _refresh_demo_metadata(self) -> None:
         """Refresh built-in navigation metadata without touching evidence or chat."""
@@ -459,7 +465,7 @@ class ProductService:
 
     def collect_public_sources(self, person_id: str) -> dict[str, object]:
         """Collect public source candidates. Discovery never creates training truth."""
-        with self._lock:
+        with self._person_lock(person_id):
             person = self._require_person(person_id)
             profile = self._conversation_call(self.conversation.profile, person_id)
             provider_id = getattr(self.public_search, "provider_id", "configured-provider")
@@ -676,7 +682,7 @@ class ProductService:
     def extract_conversation_response_candidates(
         self, person_id: str, source_id: str
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.extract_response_event_candidates,
@@ -709,7 +715,7 @@ class ProductService:
         reality_lookup_requested: bool = False,
         dialogue_model_ref: str = "",
     ) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             self._require_person(person_id)
             return self._conversation_call(
                 self.conversation.send_message,
@@ -815,6 +821,10 @@ class ProductService:
             raise ProductError("人物文件损坏。")
         return dict(raw)
 
+    def _person_lock(self, person_id: str) -> threading.RLock:
+        with self._locks_guard:
+            return self._person_locks.setdefault(person_id, threading.RLock())
+
     def _history(self, person_id: str) -> list[dict[str, object]]:
         raw = _read_json(self._person_dir(person_id) / "history.json", [])
         if not isinstance(raw, list):
@@ -844,43 +854,72 @@ class ProductService:
         with self._lock:
             result = []
             for path in sorted(self.people_dir.glob("*/person.json")):
-                person = dict(_read_json(path))
-                person_id = str(person["person_id"])
-                history = self._history(person_id)
-                versions = self._versions(person_id)
-                conversation = self._conversation_call(
-                    self.conversation.summary, person_id
-                )
-                messages = list(conversation["messages"])
-                result.append(
-                    {
-                        "person_id": person["person_id"],
-                        "name": person["name"],
-                        "description": person.get("description", ""),
-                        "avatar": person.get("avatar", ""),
-                        "identity_note": person.get("identity_note", ""),
-                        "focus_domain": person.get("focus_domain", ""),
-                        "collection": person.get(
-                            "collection", conversation["profile"].get("collection", {})
-                        ),
-                        "feature_names": person["feature_names"],
-                        "is_example": bool(person.get("is_example")),
-                        "is_demo": bool(person.get("is_demo")),
-                        "sample_count": len(history),
-                        "model_version_count": len(versions),
-                        "model_status": versions[-1]["validation_status"] if versions else "not_trained",
+                dir_id = path.parent.name
+                try:
+                    person = dict(_read_json(path))
+                    person_id = str(person["person_id"])
+                    history = self._history(person_id)
+                    versions = self._versions(person_id)
+                    conversation = self._conversation_call(
+                        self.conversation.summary, person_id
+                    )
+                    messages = list(conversation["messages"])
+                    result.append(
+                        {
+                            "person_id": person["person_id"],
+                            "name": person["name"],
+                            "description": person.get("description", ""),
+                            "avatar": person.get("avatar", ""),
+                            "identity_note": person.get("identity_note", ""),
+                            "focus_domain": person.get("focus_domain", ""),
+                            "collection": person.get(
+                                "collection", conversation["profile"].get("collection", {})
+                            ),
+                            "feature_names": person["feature_names"],
+                            "is_example": bool(person.get("is_example")),
+                            "is_demo": bool(person.get("is_demo")),
+                            "sample_count": len(history),
+                            "model_version_count": len(versions),
+                            "model_status": versions[-1]["validation_status"] if versions else "not_trained",
+                            "model_kind": "behavior_baseline_logistic",
+                            "cognitive_status": self.cognitive.summary(str(person["person_id"]))["status"],
+                            "conversation_status": conversation["status"],
+                            "conversation_status_text": conversation["status_text"],
+                            "conversation_version": conversation["active_version"],
+                            "source_count": conversation["source_counts"]["confirmed"],
+                            "message_count": len(messages),
+                            "last_message": messages[-1]["text"] if messages else "",
+                            "language": conversation["profile"]["language"],
+                            "style_profile_id": conversation["profile"]["style_profile_id"],
+                        }
+                    )
+                except Exception:
+                    result.append({
+                        "person_id": dir_id,
+                        "name": "（数据损坏）",
+                        "description": "",
+                        "avatar": "",
+                        "identity_note": "",
+                        "focus_domain": "",
+                        "collection": {"mode": "user_provided", "status": "corrupted", "message": "人物数据文件损坏，已隔离；其他人物不受影响。"},
+                        "feature_names": [],
+                        "is_example": False,
+                        "is_demo": False,
+                        "sample_count": 0,
+                        "model_version_count": 0,
+                        "model_status": "not_trained",
                         "model_kind": "behavior_baseline_logistic",
-                        "cognitive_status": self.cognitive.summary(str(person["person_id"]))["status"],
-                        "conversation_status": conversation["status"],
-                        "conversation_status_text": conversation["status_text"],
-                        "conversation_version": conversation["active_version"],
-                        "source_count": conversation["source_counts"]["confirmed"],
-                        "message_count": len(messages),
-                        "last_message": messages[-1]["text"] if messages else "",
-                        "language": conversation["profile"]["language"],
-                        "style_profile_id": conversation["profile"]["style_profile_id"],
-                    }
-                )
+                        "cognitive_status": "not_configured",
+                        "conversation_status": "corrupted",
+                        "conversation_status_text": "数据损坏，已隔离",
+                        "conversation_version": None,
+                        "source_count": 0,
+                        "message_count": 0,
+                        "last_message": "",
+                        "language": "zh",
+                        "style_profile_id": "neutral_v1",
+                        "health": "corrupted",
+                    })
             return result
 
     def create_person(
