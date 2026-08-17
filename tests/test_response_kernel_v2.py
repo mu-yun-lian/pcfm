@@ -265,8 +265,11 @@ class ModelServiceSecurityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.manager = ModelServiceManager(self.root)
+        self._services = []
 
     def tearDown(self) -> None:
+        for service in self._services:
+            service.close()
         self.temp.cleanup()
 
     def test_service_public_state_never_contains_api_key(self) -> None:
@@ -297,6 +300,7 @@ class ModelServiceSecurityTests(unittest.TestCase):
 
     def test_person_export_and_browser_state_do_not_contain_secret(self) -> None:
         product = PcfmService(self.root / "product", seed_example=False, seed_demos=True)
+        self._services.append(product)
         product.model_services.save_service(
             {"display_name": "X", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "api_key": "never-export-me", "enabled": True, "models": ["x"]}
         )
@@ -332,6 +336,7 @@ class ModelServiceSecurityTests(unittest.TestCase):
 
     def test_model_selection_only_changes_next_message_and_not_person_version(self) -> None:
         product = PcfmService(self.root / "selection", seed_example=False, seed_demos=True)
+        self._services.append(product)
         manager = product.model_services
         first = manager.save_service({"display_name": "A", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["a"]})
         second = manager.save_service({"display_name": "B", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["b"]})
@@ -347,11 +352,13 @@ class ModelServiceSecurityTests(unittest.TestCase):
 
     def test_person_model_selections_are_isolated_and_persistent(self) -> None:
         product = PcfmService(self.root / "isolation", seed_example=False, seed_demos=True)
+        self._services.append(product)
         cfg = product.model_services.save_service({"display_name": "A", "provider": "custom", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1", "enabled": True, "models": ["a", "b"]})
         with mock.patch.object(product.model_services, "resolve_model_ref", return_value=({}, "model")):
             product.select_dialogue_model("demo-sally-ride", f"{cfg['service_id']}:a")
             product.select_dialogue_model("demo-barack-obama", f"{cfg['service_id']}:b")
         reloaded = PcfmService(self.root / "isolation", seed_example=False)
+        self._services.append(reloaded)
         self.assertTrue(reloaded.conversation_summary("demo-sally-ride")["dialogue_model_ref"].endswith(":a"))
         self.assertTrue(reloaded.conversation_summary("demo-barack-obama")["dialogue_model_ref"].endswith(":b"))
 

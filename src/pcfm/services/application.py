@@ -107,9 +107,12 @@ class PcfmService(
             self._refresh_demo_sources()
         for path in sorted(self.people_dir.glob("*/person.json")):
             try:
-                self._conversation_call(
+                result = self._conversation_call(
                     self.conversation.migrate_evidence_contract, path.parent.name
                 )
+                if result.get("changed"):
+                    self._sync_sources_to_sqlite(path.parent.name)
+                    self._sync_versions_to_sqlite(path.parent.name)
             except Exception:
                 # 单个人物迁移失败(含 conversation 数据损坏)不阻断启动
                 continue
@@ -148,18 +151,20 @@ class PcfmService(
                     self.conversation.sources, person_id
                 )
             }
+            changed = False
             for source_spec in definition["sources"]:
                 source_url = str(source_spec["source_url"])
                 normalized_url = source_url.rstrip("/")
                 if normalized_url in existing_by_url:
                     aliases = list(source_spec.get("entity_aliases", []))
                     if aliases:
-                        self._conversation_call(
+                        merged = self._conversation_call(
                             self.conversation.merge_source_entity_aliases,
                             person_id,
                             existing_by_url[normalized_url],
                             aliases,
                         )
+                        changed = changed or bool(merged)
                     continue
                 source = self._conversation_call(
                     self.conversation.add_text_source,
@@ -184,6 +189,10 @@ class PcfmService(
                     "confirmed",
                 )
                 existing_by_url[normalized_url] = str(source["source_id"])
+                changed = True
+            if changed:
+                self._sync_sources_to_sqlite(person_id)
+                self._sync_versions_to_sqlite(person_id)
 
     # ---------- bounded expression rendering ----------
 
@@ -383,6 +392,7 @@ class PcfmService(
                 }
             )
             _write_json(self._person_path(person_id), person)
+            self.person_repo.upsert(person)
             self._conversation_call(
                 self.conversation.configure,
                 person_id,
@@ -417,6 +427,9 @@ class PcfmService(
                     str(source["source_id"]),
                     "confirmed",
                 )
+            self._sync_sources_to_sqlite(person_id)
+            self._sync_versions_to_sqlite(person_id)
+            self._sync_sessions_to_sqlite(person_id)
             seeded.append(person_id)
         return seeded
 

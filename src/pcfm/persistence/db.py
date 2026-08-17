@@ -8,6 +8,14 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+def _ensure_schema_migrations(conn: sqlite3.Connection) -> None:
+    """补齐后加的列, 兼容历史 pcfm.db 文件(CREATE IF NOT EXISTS 不会加列)。"""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(version)").fetchall()}
+    if "data" not in columns:
+        conn.execute("ALTER TABLE version ADD COLUMN data TEXT NOT NULL DEFAULT '{}'")
+    conn.commit()
+
+
 SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -121,6 +129,7 @@ class Database:
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA busy_timeout=5000")
             self._conn.executescript(SCHEMA)
+            _ensure_schema_migrations(self._conn)
         return self._conn
 
     @contextmanager

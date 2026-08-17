@@ -87,6 +87,7 @@ class SourceServiceMixin:
             _write_json(
                 self._person_dir(person_id) / "conversation_profile.json", profile
             )
+            self._sync_sources_to_sqlite(person_id)
             return collection
 
     def add_conversation_text_source(

@@ -6,7 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pcfm.consistency_check import check
 from pcfm.migrate_to_sqlite import migrate, rollback
+from pcfm.persistence.db import Database
 from pcfm.services import PcfmService
 
 
@@ -101,6 +103,31 @@ class SqliteSyncTests(unittest.TestCase):
         sources_path.write_text("[]", encoding="utf-8")
         self.service._sync_sources_to_sqlite(self.pid)
         self.assertEqual(self.service.source_repo.count(), 0)
+
+    def test_consistency_check_passes_after_sync(self) -> None:
+        self._add_confirmed()
+        self.service.send_conversation_message(
+            self.pid, "How should the studio release a product?"
+        )
+        report = check(Path(self.tmp.name))
+        self.assertEqual(report["problems"], 0, report["people"][self.pid])
+
+    def test_schema_migration_adds_version_data_column(self) -> None:
+        import sqlite3
+
+        db_path = Path(self.tmp.name) / "legacy.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE version ("
+            "version INTEGER NOT NULL, person_id TEXT NOT NULL, model_path TEXT, "
+            "validation_status TEXT, PRIMARY KEY (person_id, version))"
+        )
+        conn.commit()
+        conn.close()
+        db = Database(db_path)
+        columns = {row["name"] for row in db.conn.execute("PRAGMA table_info(version)").fetchall()}
+        self.assertIn("data", columns)
+        db.close()
 
     def test_migrate_and_rollback_clear_all_tables(self) -> None:
         data_dir = Path(self.tmp.name)
