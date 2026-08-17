@@ -151,6 +151,7 @@ class ConversationMVPTests(unittest.TestCase):
         self.assertEqual(len(bob_summary["messages"]), 2)
         self.assertTrue(all(item["person_id"] == alice_id for item in alice_summary["messages"]))
         self.assertTrue(all(item["person_id"] == bob_id for item in bob_summary["messages"]))
+        reloaded.close()
 
     def test_disabled_reality_lookup_has_zero_extra_calls(self) -> None:
         person_id = str(self.alice["person_id"])

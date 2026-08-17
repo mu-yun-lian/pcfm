@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS version (
     style_artifact_path TEXT,
     validation_status TEXT,
     source_ids TEXT,
+    data TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     PRIMARY KEY (person_id, version)
 );

@@ -11,8 +11,8 @@ class VersionRepository:
     def _execute(self, version: dict) -> None:
         self.db.conn.execute(
             "INSERT OR REPLACE INTO version "
-            "(version, person_id, model_path, simulation_model_path, style_artifact_path, validation_status, source_ids, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "(version, person_id, model_path, simulation_model_path, style_artifact_path, validation_status, source_ids, data, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 int(version.get("version", 0)),
                 str(version.get("person_id", "")),
@@ -21,6 +21,7 @@ class VersionRepository:
                 str(version.get("style_artifact_path", "")),
                 str(version.get("validation_status", "")),
                 json.dumps(version.get("source_ids", [])),
+                json.dumps(version, ensure_ascii=False),
                 str(version.get("created_at", "")),
             ),
         )
@@ -37,6 +38,21 @@ class VersionRepository:
             "SELECT * FROM version WHERE person_id=? ORDER BY version", (person_id,)
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def list_full_by_person(self, person_id: str) -> list[dict]:
+        """读路径: 从 data 列返回完整版本字典(SQLite 真相源)。"""
+        rows = self.db.conn.execute(
+            "SELECT data FROM version WHERE person_id=? ORDER BY version", (person_id,)
+        ).fetchall()
+        result = []
+        for row in rows:
+            try:
+                item = json.loads(row["data"])
+                if isinstance(item, dict):
+                    result.append(item)
+            except (ValueError, TypeError):
+                continue
+        return result
 
     def count(self) -> int:
         row = self.db.conn.execute("SELECT COUNT(*) AS n FROM version").fetchone()

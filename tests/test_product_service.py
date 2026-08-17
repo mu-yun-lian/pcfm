@@ -111,6 +111,7 @@ class PcfmServiceTests(unittest.TestCase):
                 diagnostic_override=True,
             )
             self.assertEqual(restored_prediction["status"], "predicted")
+            restored_service.close()
         finally:
             other.cleanup()
 
@@ -164,6 +165,7 @@ class PcfmServiceTests(unittest.TestCase):
                 detail["suggested_actual_choice"],
             )
             self.assertEqual(outcome["updated_model_version"], 2)
+            service.close()
         finally:
             other.cleanup()
 

@@ -140,7 +140,7 @@ class SummaryMixin:
                 "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in sources),
                 "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in sources),
             }
-        versions = [] if light else self._list(person_id, "conversation_versions.json")
+        versions = [] if light else self._list_versions(person_id)
         session_id = self._active_session_id(person_id)
         session = self._read_session(person_id, session_id)
         raw_messages = session.get("messages", [])
