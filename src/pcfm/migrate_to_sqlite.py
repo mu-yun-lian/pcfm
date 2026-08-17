@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .data_errors import safe_read_json
 from .persistence.db import Database
-from .persistence.repositories import PersonRepository, SourceRepository, VersionRepository
+from .persistence.repositories import PersonRepository, SourceRepository, VersionRepository, SessionRepository, MessageRepository
 
 
 def migrate(data_dir: Path) -> dict:
@@ -20,9 +20,13 @@ def migrate(data_dir: Path) -> dict:
     repo = PersonRepository(db)
     source_repo = SourceRepository(db)
     version_repo = VersionRepository(db)
+    session_repo = SessionRepository(db)
+    message_repo = MessageRepository(db)
     migrated = 0
     sources_migrated = 0
     versions_migrated = 0
+    sessions_migrated = 0
+    messages_migrated = 0
     errors = []
     for path in sorted(people_dir.glob("*/person.json")):
         person_id = path.parent.name
@@ -53,11 +57,36 @@ def migrate(data_dir: Path) -> dict:
                     versions_migrated += 1
         except Exception:
             pass
+        try:
+            state = safe_read_json(path.parent / "conversation_state.json", {})
+            active_id = str(state.get("active_session_id", "")) if isinstance(state, dict) else ""
+            sessions_dir = path.parent / "conversation_sessions"
+            if sessions_dir.exists():
+                for session_path in sorted(sessions_dir.glob("*.json")):
+                    session = safe_read_json(session_path, {})
+                    if not isinstance(session, dict) or not session.get("session_id"):
+                        continue
+                    sid = str(session["session_id"])
+                    session_record = dict(session)
+                    session_record["person_id"] = person_id
+                    session_record["active"] = sid == active_id
+                    session_repo.upsert(session_record)
+                    sessions_migrated += 1
+                    for item in session.get("messages", []):
+                        if isinstance(item, dict):
+                            msg_record = dict(item)
+                            msg_record["session_id"] = sid
+                            message_repo.upsert(msg_record)
+                            messages_migrated += 1
+        except Exception:
+            pass
     result = {
         "migrated": migrated,
         "total_in_db": repo.count(),
         "sources": sources_migrated,
         "versions": versions_migrated,
+        "sessions": sessions_migrated,
+        "messages": messages_migrated,
         "errors": errors,
     }
     db.close()

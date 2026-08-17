@@ -125,7 +125,7 @@ class ConversationServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.send_message,
                 person_id,
                 text,
@@ -134,6 +134,8 @@ class ConversationServiceMixin:
                 cancel_event=_cancel_event,
                 progress=_progress,
             )
+            self._sync_messages_to_sqlite(person_id)
+            return result
 
     def find_conversation_reality_answer(
         self, person_id: str, message_id: str,
@@ -152,6 +154,7 @@ class ConversationServiceMixin:
             if _progress:
                 _progress(1.0, "done", "完成")
             return result
+            self._sync_messages_to_sqlite(person_id)
 
     def create_optimization_candidate(
         self,
@@ -204,8 +207,10 @@ class ConversationServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.feedback, person_id, message_id, value
             )
+            self._sync_messages_to_sqlite(person_id)
+            return result
 
     # ---------- person and local persistence ----------

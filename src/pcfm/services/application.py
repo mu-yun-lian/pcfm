@@ -80,6 +80,8 @@ class PcfmService(
         self.person_repo = PersonRepository(self.db)
         self.source_repo = SourceRepository(self.db)
         self.version_repo = VersionRepository(self.db)
+        self.session_repo = SessionRepository(self.db)
+        self.message_repo = MessageRepository(self.db)
         self.conversation._source_repo = self.source_repo
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
@@ -278,6 +280,41 @@ class PcfmService(
         except Exception:
             logging.getLogger("pcfm").warning(
                 "sync_versions_to_sqlite failed person_id=%s", person_id, exc_info=True
+            )
+
+    def _sync_sessions_to_sqlite(self, person_id: str) -> None:
+        """把会话文件元数据镜像到 session 表; 失败不影响主流程。"""
+        try:
+            active_id = self._conversation_call(self.conversation._active_session_id, person_id)
+            sessions = self._conversation_call(self.conversation.list_sessions, person_id)
+            for item in sessions:
+                record = dict(item)
+                record["person_id"] = person_id
+                record["active"] = str(item.get("session_id", "")) == str(active_id)
+                self.session_repo.upsert(record)
+        except Exception:
+            logging.getLogger("pcfm").warning(
+                "sync_sessions_to_sqlite failed person_id=%s", person_id, exc_info=True
+            )
+
+    def _sync_messages_to_sqlite(self, person_id: str) -> None:
+        """把活动会话消息镜像到 message 表; 失败不影响主流程。"""
+        try:
+            session_id = self._conversation_call(self.conversation._active_session_id, person_id)
+            session = self._conversation_call(self.conversation._read_session, person_id, session_id)
+            # 先确保会话存在(满足 message 外键)
+            session_record = dict(session)
+            session_record["person_id"] = person_id
+            session_record["active"] = True
+            self.session_repo.upsert(session_record)
+            self.message_repo.delete_by_session(session_id)
+            for item in session.get("messages", []):
+                record = dict(item)
+                record["session_id"] = session_id
+                self.message_repo.upsert(record)
+        except Exception:
+            logging.getLogger("pcfm").warning(
+                "sync_messages_to_sqlite failed person_id=%s", person_id, exc_info=True
             )
 
     def _cognitive_call(self, method, *args, **kwargs):
