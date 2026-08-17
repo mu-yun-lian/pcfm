@@ -167,24 +167,28 @@ class ConversationServiceMixin:
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.review_optimization_candidate,
                 person_id,
                 candidate_id,
                 decision,
             )
+            self._sync_versions_to_sqlite(person_id)
+            return result
 
     def review_optimization_style_candidate(
         self, person_id: str, candidate_id: str, decision: str
     ) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.review_optimization_style_candidate,
                 person_id,
                 candidate_id,
                 decision,
             )
+            self._sync_versions_to_sqlite(person_id)
+            return result
 
     def record_conversation_feedback(
         self, person_id: str, message_id: str, value: str

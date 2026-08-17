@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from ._shared import *  # noqa: F401, F403
 from ._shared import (  # noqa: F401
     _as_choice,
@@ -258,7 +260,9 @@ class PcfmService(
                 record["person_id"] = person_id
                 self.source_repo.upsert(record)
         except Exception:
-            pass
+            logging.getLogger("pcfm").warning(
+                "sync_sources_to_sqlite failed person_id=%s", person_id, exc_info=True
+            )
 
     def _sync_versions_to_sqlite(self, person_id: str) -> None:
         """把 conversation_versions.json 的版本元数据镜像到 version 表; 失败不影响主流程。"""
@@ -271,7 +275,9 @@ class PcfmService(
                 record["person_id"] = person_id
                 self.version_repo.upsert(record)
         except Exception:
-            pass
+            logging.getLogger("pcfm").warning(
+                "sync_versions_to_sqlite failed person_id=%s", person_id, exc_info=True
+            )
 
     def _cognitive_call(self, method, *args, **kwargs):
         try:

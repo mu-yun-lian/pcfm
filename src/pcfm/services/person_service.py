@@ -179,7 +179,7 @@ class PersonServiceMixin:
             return self.get_person(identifier)
 
     def update_person(self, person_id: str, changes: Mapping[str, object]) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             person = self._require_person(person_id)
             if "name" in changes:
                 name = str(changes["name"]).strip()
@@ -265,7 +265,7 @@ class PersonServiceMixin:
             return self.get_person(person_id)
 
     def delete_person(self, person_id: str) -> None:
-        with self._lock:
+        with self._person_lock(person_id):
             directory = self._person_dir(person_id)
             if not (directory / "person.json").exists():
                 raise ProductError("人物不存在。")
@@ -279,7 +279,7 @@ class PersonServiceMixin:
 
     def set_avatar(self, person_id: str, data_url: str) -> dict[str, object]:
         """保存人物头像（本地文件），data_url 形如 data:image/png;base64,...；传空则移除。"""
-        with self._lock:
+        with self._person_lock(person_id):
             person = self._require_person(person_id)
             if not str(data_url).strip():
                 for old_ext in ("png", "jpg", "jpeg", "webp", "gif"):
@@ -323,7 +323,7 @@ class PersonServiceMixin:
         raise ProductError("该人物还没有头像。")
 
     def get_person(self, person_id: str) -> dict[str, object]:
-        with self._lock:
+        with self._person_lock(person_id):
             person = self._require_person(person_id)
             history = self._history(person_id)
             training, applicability, validation = self._partition_history(history)
