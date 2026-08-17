@@ -27,6 +27,8 @@ test('PCFM 完整主流程: 创建人物 → 加资料 → 对话 → 现实对�
   await page.getByRole('button', { name: '发送' }).click()
   await expect(page.locator('.message-row.user').first()).toBeVisible()
   await expect(page.locator('.message-row.assistant').first()).toBeVisible({ timeout: 30_000 })
+  // 等待助手回答真实生成完成(乐观占位"生成中…"替换为真实答案)后再做现实对照
+  await expect(page.locator('.message-row.assistant .answer').first()).not.toContainText('生成中…', { timeout: 30_000 })
 
   // 4. 现实对照(按钮打开抽屉或返回候选)
   await page.getByRole('button', { name: '现实回答' }).first().click()

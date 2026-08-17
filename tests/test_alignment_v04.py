@@ -164,14 +164,36 @@ class AlignmentV04Tests(unittest.TestCase):
             identity_note="technology executive",
             focus_domain="public interviews",
         )
-        detail = service.get_person(str(person["person_id"]))
-        summary = service.conversation_summary(str(person["person_id"]))
+        person_id = str(person["person_id"])
+        detail = service.get_person(person_id)
+        # T6: creating a system_search person no longer searches synchronously.
+        self.assertEqual(detail["collection"]["status"], "search_ready")
+        self.assertEqual(service.conversation_summary(person_id)["sources"], [])
+        # The search runs as a separate task, then pending candidates appear.
+        service.collect_public_sources(person_id)
+        detail = service.get_person(person_id)
+        summary = service.conversation_summary(person_id)
         self.assertEqual(detail["collection"]["status"], "candidates_found")
         self.assertEqual(detail["collection"]["provider"], "fake-public-search")
         self.assertEqual(len(summary["sources"]), 1)
         self.assertEqual(summary["sources"][0]["source_type"], "system_search_result")
         self.assertEqual(summary["sources"][0]["dataset_role"], "reference_only")
         self.assertIsNone(summary["active_version"])
+
+    def test_create_person_system_search_is_async(self) -> None:
+        service = self._service(public_search=FakePublicSearch())
+        person = service.create_conversation_person(
+            name="Async Search Person",
+            language="en",
+            source_mode="system_search",
+        )
+        person_id = str(person["person_id"])
+        # Creating the person does not run the search synchronously.
+        self.assertEqual(service.get_person(person_id)["collection"]["status"], "search_ready")
+        self.assertEqual(service.conversation_summary(person_id)["sources"], [])
+        # The search only runs when explicitly triggered as a task.
+        service.collect_public_sources(person_id)
+        self.assertEqual(service.get_person(person_id)["collection"]["status"], "candidates_found")
 
     def test_unconfigured_search_is_disabled_and_rejected_before_person_creation(self) -> None:
         service = self._service(public_search=False)

@@ -149,7 +149,7 @@ watch(
               不确定项：{{ m.uncertainties.join('；') }}
             </div>
 
-            <div class="message-actions">
+            <div v-if="m.status !== 'generating'" class="message-actions">
               <button @click="toggleEvidence(m.message_id)">依据</button>
               <button :disabled="runningReality === m.message_id" @click="runReality(m)">
                 {{ runningReality === m.message_id ? '查找中…' : '现实回答' }}
