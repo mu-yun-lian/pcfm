@@ -25,7 +25,7 @@ from ..assistant import AssistantEngine
 from ..data_errors import PcfmDataError, safe_read_json
 from ..persistence.db import Database
 from ..jobs import JobCancelled, JobRunner, JobStore
-from ..persistence.repositories import PersonRepository, SourceRepository, VersionRepository, SessionRepository, MessageRepository
+from ..persistence.repositories import PersonRepository, SourceRepository, VersionRepository, SessionRepository, MessageRepository, ConversationStateRepository
 from ..contracts import Observation, Scenario
 from ..cognitive_workbench import (
     CognitiveWorkbench,

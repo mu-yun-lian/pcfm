@@ -4,5 +4,6 @@ from .source_repo import SourceRepository
 from .version_repo import VersionRepository
 from .session_repo import SessionRepository
 from .message_repo import MessageRepository
+from .conversation_state_repo import ConversationStateRepository
 
-__all__ = ["PersonRepository", "SourceRepository", "VersionRepository", "SessionRepository", "MessageRepository"]
+__all__ = ["PersonRepository", "SourceRepository", "VersionRepository", "SessionRepository", "MessageRepository", "ConversationStateRepository"]

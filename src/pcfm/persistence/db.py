@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS job (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conversation_state (
+    person_id TEXT PRIMARY KEY REFERENCES person(person_id) ON DELETE CASCADE,
+    active_version INTEGER,
+    active_session_id TEXT,
+    dialogue_model_ref TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 """
 
 

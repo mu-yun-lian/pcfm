@@ -82,6 +82,7 @@ class PcfmService(
         self.version_repo = VersionRepository(self.db)
         self.session_repo = SessionRepository(self.db)
         self.message_repo = MessageRepository(self.db)
+        self.state_repo = ConversationStateRepository(self.db)
         self.conversation._source_repo = self.source_repo
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
@@ -269,16 +270,25 @@ class PcfmService(
             )
 
     def _sync_versions_to_sqlite(self, person_id: str) -> None:
-        """把 conversation_versions.json 的版本元数据镜像到 version 表; 失败不影响主流程。"""
+        """把版本元数据 + 对话状态镜像到 SQLite, 用事务保证 version 与 active_version 原子一致。"""
         try:
             self._ensure_person_in_sqlite(person_id)
             versions = self._conversation_call(
                 self.conversation._list, person_id, "conversation_versions.json"
             )
-            for item in versions:
-                record = dict(item)
-                record["person_id"] = person_id
-                self.version_repo.upsert(record)
+            state = self._conversation_call(self.conversation._state, person_id)
+            state_record = {
+                "active_version": state.get("active_version"),
+                "active_session_id": state.get("active_session_id", ""),
+                "dialogue_model_ref": state.get("dialogue_model_ref", ""),
+                "updated_at": str(state.get("updated_at", "")),
+            }
+            with self.db.transaction():
+                for item in versions:
+                    record = dict(item)
+                    record["person_id"] = person_id
+                    self.version_repo.upsert_no_commit(record)
+                self.state_repo.upsert_no_commit(person_id, state_record)
         except Exception:
             logging.getLogger("pcfm").warning(
                 "sync_versions_to_sqlite failed person_id=%s", person_id, exc_info=True

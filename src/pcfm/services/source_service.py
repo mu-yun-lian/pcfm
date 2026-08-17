@@ -220,4 +220,5 @@ class SourceServiceMixin:
                 self.conversation.review_source, person_id, source_id, decision
             )
             self._sync_sources_to_sqlite(person_id)
+            self._sync_versions_to_sqlite(person_id)
             return result
