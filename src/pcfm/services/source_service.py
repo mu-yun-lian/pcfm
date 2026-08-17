@@ -142,7 +142,13 @@ class SourceServiceMixin:
         source_locator: str = "",
         source_context: str = "",
         speaker_scope: str = "single_speaker_entire_document",
+        _progress: object = None,
+        _cancel_event: object = None,
     ) -> dict[str, object]:
+        if _cancel_event is not None and _cancel_event.is_set():
+            raise JobCancelled()
+        if _progress:
+            _progress(0.2, "parsing", "正在解析文件…")
         with self._person_lock(person_id):
             self._require_person(person_id)
             result = self._conversation_call(
@@ -158,7 +164,11 @@ class SourceServiceMixin:
                 source_context=source_context,
                 speaker_scope=speaker_scope,
             )
+            if _cancel_event is not None and _cancel_event.is_set():
+                raise JobCancelled()
             self._sync_sources_to_sqlite(person_id)
+            if _progress:
+                _progress(1.0, "done", "完成")
             return result
 
     def add_conversation_url_source(
@@ -173,7 +183,13 @@ class SourceServiceMixin:
         source_locator: str = "",
         source_context: str = "",
         speaker_scope: str = "single_speaker_entire_document",
+        _progress: object = None,
+        _cancel_event: object = None,
     ) -> dict[str, object]:
+        if _cancel_event is not None and _cancel_event.is_set():
+            raise JobCancelled()
+        if _progress:
+            _progress(0.2, "fetching", "正在抓取网页…")
         with self._person_lock(person_id):
             self._require_person(person_id)
             result = self._conversation_call(
@@ -188,7 +204,11 @@ class SourceServiceMixin:
                 source_context=source_context,
                 speaker_scope=speaker_scope,
             )
+            if _cancel_event is not None and _cancel_event.is_set():
+                raise JobCancelled()
             self._sync_sources_to_sqlite(person_id)
+            if _progress:
+                _progress(1.0, "done", "完成")
             return result
 
     def review_conversation_source(

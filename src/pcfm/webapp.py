@@ -342,37 +342,45 @@ def create_handler(service: PcfmService):
                         )
                         return
                     if action == ["conversation", "sources", "file"]:
-                        result = service.add_conversation_file_source(
+                        job = service.job_runner.submit(
+                            "file_source",
                             person_id,
-                            filename=str(body.get("filename", "")),
-                            content_base64=str(body.get("content_base64", "")),
-                            speaker=str(body.get("speaker", "")),
-                            source_date=str(body.get("source_date", "")),
-                            dataset_role=str(body.get("dataset_role", "model_source")),
-                            content_authenticity=str(body.get("content_authenticity", "unverified_material")),
-                            source_locator=str(body.get("source_locator", "")),
-                            source_context=str(body.get("source_context", "")),
-                            speaker_scope=str(body.get("speaker_scope", "single_speaker_entire_document")),
+                            lambda progress=None, cancel=None: service.add_conversation_file_source(
+                                person_id,
+                                filename=str(body.get("filename", "")),
+                                content_base64=str(body.get("content_base64", "")),
+                                speaker=str(body.get("speaker", "")),
+                                source_date=str(body.get("source_date", "")),
+                                dataset_role=str(body.get("dataset_role", "model_source")),
+                                content_authenticity=str(body.get("content_authenticity", "unverified_material")),
+                                source_locator=str(body.get("source_locator", "")),
+                                source_context=str(body.get("source_context", "")),
+                                speaker_scope=str(body.get("speaker_scope", "single_speaker_entire_document")),
+                                _progress=progress,
+                                _cancel_event=cancel,
+                            ),
                         )
-                        self._send_json(
-                            {"ok": True, "source": result}, HTTPStatus.CREATED
-                        )
+                        self._send_json({"ok": True, "job_id": job.job_id}, HTTPStatus.CREATED)
                         return
                     if action == ["conversation", "sources", "url"]:
-                        result = service.add_conversation_url_source(
+                        job = service.job_runner.submit(
+                            "url_source",
                             person_id,
-                            url=str(body.get("url", "")),
-                            speaker=str(body.get("speaker", "")),
-                            source_date=str(body.get("source_date", "")),
-                            dataset_role=str(body.get("dataset_role", "model_source")),
-                            content_authenticity=str(body.get("content_authenticity", "unverified_material")),
-                            source_locator=str(body.get("source_locator", "")),
-                            source_context=str(body.get("source_context", "")),
-                            speaker_scope=str(body.get("speaker_scope", "single_speaker_entire_document")),
+                            lambda progress=None, cancel=None: service.add_conversation_url_source(
+                                person_id,
+                                url=str(body.get("url", "")),
+                                speaker=str(body.get("speaker", "")),
+                                source_date=str(body.get("source_date", "")),
+                                dataset_role=str(body.get("dataset_role", "model_source")),
+                                content_authenticity=str(body.get("content_authenticity", "unverified_material")),
+                                source_locator=str(body.get("source_locator", "")),
+                                source_context=str(body.get("source_context", "")),
+                                speaker_scope=str(body.get("speaker_scope", "single_speaker_entire_document")),
+                                _progress=progress,
+                                _cancel_event=cancel,
+                            ),
                         )
-                        self._send_json(
-                            {"ok": True, "source": result}, HTTPStatus.CREATED
-                        )
+                        self._send_json({"ok": True, "job_id": job.job_id}, HTTPStatus.CREATED)
                         return
                     if action == ["conversation", "search"]:
                         job = service.job_runner.submit(
@@ -469,10 +477,17 @@ def create_handler(service: PcfmService):
                         and action[:2] == ["conversation", "messages"]
                         and action[3] == "reality"
                     ):
-                        result = service.find_conversation_reality_answer(
-                            person_id, action[2]
+                        job = service.job_runner.submit(
+                            "reality_lookup",
+                            person_id,
+                            lambda progress=None, cancel=None: service.find_conversation_reality_answer(
+                                person_id,
+                                action[2],
+                                _progress=progress,
+                                _cancel_event=cancel,
+                            ),
                         )
-                        self._send_json({"ok": True, "comparison": result})
+                        self._send_json({"ok": True, "job_id": job.job_id})
                         return
                     if (
                         len(action) == 4

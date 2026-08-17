@@ -272,12 +272,15 @@ export const useAppStore = defineStore('app', {
 
     async runRealityLookup(messageId: string) {
       if (!this.person) return
-      const data = await api<{ comparison: Comparison }>(
+      const res = await api<{ job_id: string }>(
         '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/messages/' + encodeURIComponent(messageId) + '/reality',
         { method: 'POST', body: '{}' },
       )
+      await pollJob(res.job_id)
       await this.refreshConversation()
-      if (data.comparison.status === 'candidate_found') this.openComparison(data.comparison)
+      const message = this.conversation?.messages.find((m) => m.message_id === messageId)
+      const comparison = message?.comparison
+      if (comparison && comparison.status === 'candidate_found') this.openComparison(comparison)
       else this.showToast('未找到可核验的现实回答。系统没有生成伪造对照。')
     },
 
@@ -489,19 +492,21 @@ export const useAppStore = defineStore('app', {
     },
     async submitFileSource(body: Record<string, unknown>) {
       if (!this.person) return
-      await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/file', {
+      const res = await api<{ job_id: string }>('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/file', {
         method: 'POST',
         body: JSON.stringify(body),
       })
+      await pollJob(res.job_id)
       this.showToast('文件已按事件候选整理并进入待审核队列。')
       await this.refreshConversation()
     },
     async submitUrlSource(body: Record<string, unknown>) {
       if (!this.person) return
-      await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/url', {
+      const res = await api<{ job_id: string }>('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/url', {
         method: 'POST',
         body: JSON.stringify(body),
       })
+      await pollJob(res.job_id)
       this.showToast('网页快照已按事件候选整理并进入待审核队列。')
       await this.refreshConversation()
     },

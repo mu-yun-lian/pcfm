@@ -136,13 +136,22 @@ class ConversationServiceMixin:
             )
 
     def find_conversation_reality_answer(
-        self, person_id: str, message_id: str
+        self, person_id: str, message_id: str,
+        _progress: object = None,
+        _cancel_event: object = None,
     ) -> dict[str, object]:
+        if _cancel_event is not None and _cancel_event.is_set():
+            raise JobCancelled()
+        if _progress:
+            _progress(0.3, "matching", "正在本地匹配现实回答…")
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.find_reality_answer, person_id, message_id
             )
+            if _progress:
+                _progress(1.0, "done", "完成")
+            return result
 
     def create_optimization_candidate(
         self,
