@@ -47,20 +47,8 @@ class VersionBuilderMixin:
         except Exception:
             pass
 
-    def _list_versions(self, person_id: str) -> list[dict[str, object]]:
-        """版本读路径: 优先 SQLite 真相源(version 表 data 列), 回退 JSON。"""
-        repo = getattr(self, "_version_repo", None)
-        if repo is not None:
-            try:
-                versions = repo.list_full_by_person(person_id)
-                if versions:
-                    return versions
-            except Exception:
-                pass
-        return self._list(person_id, "conversation_versions.json")
-
     def _version_source_ids(self, person_id: str, version_number: int | None = None) -> list[str]:
-        versions = self._list_versions(person_id)
+        versions = self._list(person_id, "conversation_versions.json")
         state = self._state(person_id)
         target = version_number if version_number is not None else state.get("active_version")
         for version in versions:
