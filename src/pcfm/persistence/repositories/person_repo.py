@@ -34,6 +34,17 @@ class PersonRepository:
             return None
         return dict(row)
 
+    def mark_archived(self, person_id: str, updated_at: str) -> None:
+        self.db.conn.execute(
+            "UPDATE person SET health='archived', updated_at=? WHERE person_id=?",
+            (updated_at, person_id),
+        )
+        self.db.conn.commit()
+
+    def delete(self, person_id: str) -> None:
+        self.db.conn.execute("DELETE FROM person WHERE person_id=?", (person_id,))
+        self.db.conn.commit()
+
     def list_index(self) -> list[dict]:
         rows = self.db.conn.execute(
             "SELECT person_id, name, description, avatar, identity_note, focus_domain, health FROM person"

@@ -30,6 +30,9 @@ class SessionRepository:
     def upsert_no_commit(self, session: dict) -> None:
         self._execute(session)
 
+    def delete_by_person_no_commit(self, person_id: str) -> None:
+        self.db.conn.execute("DELETE FROM session WHERE person_id=?", (person_id,))
+
     def get(self, session_id: str) -> dict | None:
         row = self.db.conn.execute("SELECT * FROM session WHERE session_id=?", (session_id,)).fetchone()
         return dict(row) if row else None

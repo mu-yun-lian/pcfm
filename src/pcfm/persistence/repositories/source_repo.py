@@ -39,6 +39,9 @@ class SourceRepository:
     def upsert_no_commit(self, source: dict) -> None:
         self._execute(source)
 
+    def delete_by_person_no_commit(self, person_id: str) -> None:
+        self.db.conn.execute("DELETE FROM source WHERE person_id=?", (person_id,))
+
     def count(self) -> int:
         row = self.db.conn.execute("SELECT COUNT(*) AS n FROM source").fetchone()
         return int(row["n"])

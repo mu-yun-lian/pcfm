@@ -49,6 +49,7 @@ class ArchiveServiceMixin:
             person.pop("archived_at", None)
             _write_json(source / "person.json", person)
             source.rename(target)
+            self.person_repo.upsert(person)
             return self.get_person(person_id)
 
     def permanently_delete_archived_person(
@@ -64,6 +65,7 @@ class ArchiveServiceMixin:
             if str(expected_name).strip() != str(archived.get("name", "")):
                 raise ProductError("永久删除前必须输入完全一致的人物名称。")
             shutil.rmtree(target)
+            self.person_repo.delete(person_id)
 
     # ---------- ordinary and advanced data import ----------
 

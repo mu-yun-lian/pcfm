@@ -262,6 +262,7 @@ class PcfmService(
                 self.conversation._list, person_id, "conversation_sources.json"
             )
             with self.db.transaction():
+                self.source_repo.delete_by_person_no_commit(person_id)
                 for item in sources:
                     record = dict(item)
                     record["person_id"] = person_id
@@ -303,6 +304,7 @@ class PcfmService(
             active_id = self._conversation_call(self.conversation._active_session_id, person_id)
             sessions = self._conversation_call(self.conversation.list_sessions, person_id)
             with self.db.transaction():
+                self.session_repo.delete_by_person_no_commit(person_id)
                 for item in sessions:
                     record = dict(item)
                     record["person_id"] = person_id

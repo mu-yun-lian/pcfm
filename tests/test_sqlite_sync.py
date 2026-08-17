@@ -73,6 +73,35 @@ class SqliteSyncTests(unittest.TestCase):
         self.assertEqual(self.service.message_repo.count(), 2)
         self.assertIsNotNone(self.service.state_repo.get(self.pid))
 
+    def test_set_avatar_syncs_person_table(self) -> None:
+        self.service.set_avatar(self.pid, "data:image/png;base64,aGVsbG8=")
+        row = self.service.person_repo.get(self.pid)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["avatar"], f"/api/people/{self.pid}/avatar")
+
+    def test_delete_and_restore_person_syncs_health(self) -> None:
+        self.service.delete_person(self.pid)
+        row = self.service.person_repo.get(self.pid)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["health"], "archived")
+        self.service.restore_person(self.pid)
+        row = self.service.person_repo.get(self.pid)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["health"], "ok")
+
+    def test_permanent_delete_removes_person_row(self) -> None:
+        self.service.delete_person(self.pid)
+        self.service.permanently_delete_archived_person(self.pid, expected_name="Alice")
+        self.assertIsNone(self.service.person_repo.get(self.pid))
+
+    def test_sync_sources_removes_stale_rows(self) -> None:
+        self._add_confirmed()
+        self.assertEqual(self.service.source_repo.count(), 1)
+        sources_path = self.service._person_dir(self.pid) / "conversation_sources.json"
+        sources_path.write_text("[]", encoding="utf-8")
+        self.service._sync_sources_to_sqlite(self.pid)
+        self.assertEqual(self.service.source_repo.count(), 0)
+
     def test_migrate_and_rollback_clear_all_tables(self) -> None:
         data_dir = Path(self.tmp.name)
         result = migrate(data_dir)

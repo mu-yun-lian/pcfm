@@ -275,6 +275,7 @@ class PersonServiceMixin:
             person = self._require_person(person_id)
             person["archived_at"] = _utc_now()
             _write_json(directory / "person.json", person)
+            self.person_repo.mark_archived(person_id, person["archived_at"])
             directory.rename(target)
 
     def set_avatar(self, person_id: str, data_url: str) -> dict[str, object]:
@@ -289,6 +290,7 @@ class PersonServiceMixin:
                 person["avatar"] = ""
                 person["updated_at"] = _utc_now()
                 _write_json(self._person_path(person_id), person)
+                self.person_repo.upsert(person)
                 return self.get_person(person_id)
             header = "image/png"
             encoded = str(data_url).strip()
@@ -311,10 +313,14 @@ class PersonServiceMixin:
             person["avatar"] = f"/api/people/{person_id}/avatar"
             person["updated_at"] = _utc_now()
             _write_json(self._person_path(person_id), person)
+            self.person_repo.upsert(person)
             return self.get_person(person_id)
 
     def get_avatar(self, person_id: str) -> tuple[bytes, str]:
-        """返回头像字节与 MIME；无头像时抛 ProductError。"""
+        """返回头像字节与 MIME；无头像时抛 ProductError。
+
+        只读头像文件，不修改人物状态，故不加 _person_lock（与 REQ-02 的写锁语义区分）。
+        """
         person = self._require_person(person_id)
         for ext, mime in (("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("webp", "image/webp"), ("gif", "image/gif")):
             path = self._person_dir(person_id) / f"avatar.{ext}"
