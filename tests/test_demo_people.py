@@ -17,6 +17,7 @@ class VerifiedDemoPeopleTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def test_seed_is_idempotent_and_creates_two_isolated_demo_people(self) -> None:
@@ -58,6 +59,7 @@ class VerifiedDemoPeopleTests(unittest.TestCase):
                 for source in obama["sources"]
             ),
         )
+        reloaded.close()
 
     def test_each_demo_has_five_training_events_and_two_sealed_holdouts(self) -> None:
         for person_id in ("demo-sally-ride", "demo-barack-obama"):

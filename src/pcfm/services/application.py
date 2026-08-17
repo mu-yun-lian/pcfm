@@ -255,6 +255,7 @@ class PcfmService(
     def _sync_sources_to_sqlite(self, person_id: str) -> None:
         """把 conversation_sources.json 的资料元数据镜像到 source 表; 失败不影响主流程。"""
         try:
+            self._ensure_person_in_sqlite(person_id)
             sources = self._conversation_call(
                 self.conversation._list, person_id, "conversation_sources.json"
             )
@@ -270,6 +271,7 @@ class PcfmService(
     def _sync_versions_to_sqlite(self, person_id: str) -> None:
         """把 conversation_versions.json 的版本元数据镜像到 version 表; 失败不影响主流程。"""
         try:
+            self._ensure_person_in_sqlite(person_id)
             versions = self._conversation_call(
                 self.conversation._list, person_id, "conversation_versions.json"
             )
@@ -285,6 +287,7 @@ class PcfmService(
     def _sync_sessions_to_sqlite(self, person_id: str) -> None:
         """把会话文件元数据镜像到 session 表; 失败不影响主流程。"""
         try:
+            self._ensure_person_in_sqlite(person_id)
             active_id = self._conversation_call(self.conversation._active_session_id, person_id)
             sessions = self._conversation_call(self.conversation.list_sessions, person_id)
             for item in sessions:
@@ -300,6 +303,7 @@ class PcfmService(
     def _sync_messages_to_sqlite(self, person_id: str) -> None:
         """把活动会话消息镜像到 message 表; 失败不影响主流程。"""
         try:
+            self._ensure_person_in_sqlite(person_id)
             session_id = self._conversation_call(self.conversation._active_session_id, person_id)
             session = self._conversation_call(self.conversation._read_session, person_id, session_id)
             # 先确保会话存在(满足 message 外键)
@@ -316,6 +320,14 @@ class PcfmService(
             logging.getLogger("pcfm").warning(
                 "sync_messages_to_sqlite failed person_id=%s", person_id, exc_info=True
             )
+
+    def _ensure_person_in_sqlite(self, person_id: str) -> None:
+        """确保人物在 person 表(演示人物直接写文件未走 person_repo), 满足外键。"""
+        try:
+            if self.person_repo.get(person_id) is None:
+                self.person_repo.upsert(self._require_person(person_id))
+        except Exception:
+            pass
 
     def _cognitive_call(self, method, *args, **kwargs):
         try:

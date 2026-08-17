@@ -175,6 +175,7 @@ class PredictionLayerTargetTests(unittest.TestCase):
                 "demo-sally-ride",
                 "Tell us what prompted you to write that note and describe the events that followed.",
             )
+            service.close()
         self.assertEqual("simulation-v5", reply["prediction_trace"]["kernel"])
         self.assertTrue(reply["prediction_trace"]["selected_event_ids"])
         basis = reply["structured_prediction"]["response_basis"]
@@ -193,6 +194,7 @@ class PredictionLayerTargetTests(unittest.TestCase):
                 service.conversation_summary(person_id)["baseline_report"]
                 for person_id in ("demo-sally-ride", "demo-barack-obama")
             ]
+            service.close()
         for report in reports:
             self.assertEqual("exploratory_not_confirmatory", report["status"])
             self.assertGreater(report["sample_count"], 0)

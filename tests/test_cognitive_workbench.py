@@ -22,6 +22,7 @@ class CognitiveWorkbenchTests(unittest.TestCase):
         self.person_id = "josh-hawley-section230"
 
     def tearDown(self) -> None:
+        self.service.close()
         self.temporary.cleanup()
 
     def confirm_all_seed_evidence(self) -> list[dict[str, object]]:
