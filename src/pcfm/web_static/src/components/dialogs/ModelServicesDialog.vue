@@ -24,6 +24,11 @@ const formEl = ref<HTMLElement>()
 const formHeading = ref('添加供应商')
 const preset = ref('')
 const keyVisible = ref(false)
+const isEnvironmentOnly = computed(() => {
+  const caps = store.capabilities as Record<string, unknown>
+  const ms = (caps.model_services as Record<string, unknown>) || {}
+  return ms.secret_storage === 'environment_only'
+})
 const busyAction = ref('')
 const formBusy = ref(false)
 
@@ -310,9 +315,10 @@ async function setRole(role: string, event: Event) {
           <div class="two-cols">
             <label>API Key
               <span class="key-wrap">
-                <input v-model="form.api_key" :type="keyVisible ? 'text' : 'password'" autocomplete="new-password" placeholder="粘贴 API Key" />
-                <button type="button" class="key-eye" title="显示/隐藏" aria-label="显示或隐藏 API Key" @click="toggleKeyVisibility">{{ keyVisible ? '🙈' : '👁' }}</button>
+                <input v-model="form.api_key" :type="keyVisible ? 'text' : 'password'" autocomplete="new-password" placeholder="粘贴 API Key" :disabled="isEnvironmentOnly" />
+                <button type="button" class="key-eye" title="显示/隐藏" aria-label="显示或隐藏 API Key" @click="toggleKeyVisibility" :disabled="isEnvironmentOnly">{{ keyVisible ? '🙈' : '👁' }}</button>
               </span>
+              <small v-if="isEnvironmentOnly">当前系统不支持本机凭据加密，请改用下方「环境变量名」引用密钥。</small>
             </label>
             <label>环境变量名（可选）<input v-model="form.environment_key" placeholder="OPENAI_API_KEY" /></label>
           </div>

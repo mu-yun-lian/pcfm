@@ -205,7 +205,7 @@ class PcfmService(
                     "custom_compatible",
                 ],
                 "configured_count": len(self.model_services.public_state()["services"]),
-                "secret_storage": "windows_dpapi_server_only",
+                "secret_storage": "windows_dpapi_server_only" if os.name == "nt" else "environment_only",
             },
         }
 
