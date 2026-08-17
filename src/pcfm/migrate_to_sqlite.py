@@ -11,7 +11,14 @@ from pathlib import Path
 
 from .data_errors import safe_read_json
 from .persistence.db import Database
-from .persistence.repositories import PersonRepository, SourceRepository, VersionRepository, SessionRepository, MessageRepository
+from .persistence.repositories import (
+    ConversationStateRepository,
+    MessageRepository,
+    PersonRepository,
+    SessionRepository,
+    SourceRepository,
+    VersionRepository,
+)
 
 
 def migrate(data_dir: Path) -> dict:
@@ -22,6 +29,7 @@ def migrate(data_dir: Path) -> dict:
     version_repo = VersionRepository(db)
     session_repo = SessionRepository(db)
     message_repo = MessageRepository(db)
+    state_repo = ConversationStateRepository(db)
     migrated = 0
     sources_migrated = 0
     versions_migrated = 0
@@ -60,6 +68,13 @@ def migrate(data_dir: Path) -> dict:
         try:
             state = safe_read_json(path.parent / "conversation_state.json", {})
             active_id = str(state.get("active_session_id", "")) if isinstance(state, dict) else ""
+            if isinstance(state, dict):
+                state_repo.upsert(person_id, {
+                    "active_version": state.get("active_version"),
+                    "active_session_id": state.get("active_session_id", ""),
+                    "dialogue_model_ref": state.get("dialogue_model_ref", ""),
+                    "updated_at": str(state.get("updated_at", "")),
+                })
             sessions_dir = path.parent / "conversation_sessions"
             if sessions_dir.exists():
                 for session_path in sorted(sessions_dir.glob("*.json")):
@@ -98,13 +113,22 @@ def rollback(data_dir: Path) -> dict:
     repo = PersonRepository(db)
     source_repo = SourceRepository(db)
     version_repo = VersionRepository(db)
+    session_repo = SessionRepository(db)
+    message_repo = MessageRepository(db)
+    state_repo = ConversationStateRepository(db)
     repo.clear()
     source_repo.clear()
     version_repo.clear()
+    session_repo.clear()
+    message_repo.clear()
+    state_repo.clear()
     result = {
         "persons_after_clear": repo.count(),
         "sources_after_clear": source_repo.count(),
         "versions_after_clear": version_repo.count(),
+        "sessions_after_clear": session_repo.count(),
+        "messages_after_clear": message_repo.count(),
+        "states_after_clear": state_repo.count(),
     }
     db.close()
     return result

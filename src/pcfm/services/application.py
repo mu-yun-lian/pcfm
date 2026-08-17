@@ -261,10 +261,11 @@ class PcfmService(
             sources = self._conversation_call(
                 self.conversation._list, person_id, "conversation_sources.json"
             )
-            for item in sources:
-                record = dict(item)
-                record["person_id"] = person_id
-                self.source_repo.upsert(record)
+            with self.db.transaction():
+                for item in sources:
+                    record = dict(item)
+                    record["person_id"] = person_id
+                    self.source_repo.upsert_no_commit(record)
         except Exception:
             logging.getLogger("pcfm").warning(
                 "sync_sources_to_sqlite failed person_id=%s", person_id, exc_info=True
@@ -301,11 +302,12 @@ class PcfmService(
             self._ensure_person_in_sqlite(person_id)
             active_id = self._conversation_call(self.conversation._active_session_id, person_id)
             sessions = self._conversation_call(self.conversation.list_sessions, person_id)
-            for item in sessions:
-                record = dict(item)
-                record["person_id"] = person_id
-                record["active"] = str(item.get("session_id", "")) == str(active_id)
-                self.session_repo.upsert(record)
+            with self.db.transaction():
+                for item in sessions:
+                    record = dict(item)
+                    record["person_id"] = person_id
+                    record["active"] = str(item.get("session_id", "")) == str(active_id)
+                    self.session_repo.upsert_no_commit(record)
         except Exception:
             logging.getLogger("pcfm").warning(
                 "sync_sessions_to_sqlite failed person_id=%s", person_id, exc_info=True
@@ -318,15 +320,16 @@ class PcfmService(
             session_id = self._conversation_call(self.conversation._active_session_id, person_id)
             session = self._conversation_call(self.conversation._read_session, person_id, session_id)
             # 先确保会话存在(满足 message 外键)
-            session_record = dict(session)
-            session_record["person_id"] = person_id
-            session_record["active"] = True
-            self.session_repo.upsert(session_record)
-            self.message_repo.delete_by_session(session_id)
-            for item in session.get("messages", []):
-                record = dict(item)
-                record["session_id"] = session_id
-                self.message_repo.upsert(record)
+            with self.db.transaction():
+                session_record = dict(session)
+                session_record["person_id"] = person_id
+                session_record["active"] = True
+                self.session_repo.upsert_no_commit(session_record)
+                self.message_repo.delete_by_session_no_commit(session_id)
+                for item in session.get("messages", []):
+                    record = dict(item)
+                    record["session_id"] = session_id
+                    self.message_repo.upsert_no_commit(record)
         except Exception:
             logging.getLogger("pcfm").warning(
                 "sync_messages_to_sqlite failed person_id=%s", person_id, exc_info=True

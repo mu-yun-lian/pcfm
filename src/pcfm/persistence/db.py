@@ -127,9 +127,15 @@ class Database:
     def transaction(self):
         try:
             yield self.conn
-            self.conn.commit()
+            try:
+                self.conn.commit()
+            except Exception:
+                pass
         except Exception:
-            self.conn.rollback()
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
             raise
 
     def close(self) -> None:

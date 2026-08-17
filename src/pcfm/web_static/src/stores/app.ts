@@ -531,7 +531,22 @@ export const useAppStore = defineStore('app', {
       this.creatingPerson = false
       this.activeDialog = ''
       await this.loadPeople(data.person.person_id)
-      this.showToast('人物已创建。')
+      if (body.source_mode === 'system_search') {
+        this.showToast('人物已创建，正在搜索公开资料…')
+        try {
+          const res = await api<{ job_id: string }>(
+            '/api/people/' + encodeURIComponent(data.person.person_id) + '/conversation/search',
+            { method: 'POST', body: '{}' },
+          )
+          await pollJob(res.job_id)
+          await this.refreshConversation()
+          this.showToast('人物已创建，公开资料搜索任务已完成。')
+        } catch (error) {
+          this.showToast((error as Error).message, true)
+        }
+      } else {
+        this.showToast('人物已创建。')
+      }
     },
 
     async uploadAvatar(dataUrl: string) {

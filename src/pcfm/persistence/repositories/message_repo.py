@@ -12,7 +12,7 @@ class MessageRepository:
     def _json(value) -> str | None:
         return json.dumps(value, ensure_ascii=False) if value else None
 
-    def upsert(self, message: dict) -> None:
+    def _execute(self, message: dict) -> None:
         self.db.conn.execute(
             "INSERT OR REPLACE INTO message "
             "(message_id, session_id, role, text, status, answer_status, structured_prediction, prediction_trace, model_usage, style_status, comparison, feedback, created_at) "
@@ -33,11 +33,20 @@ class MessageRepository:
                 str(message.get("created_at", "")),
             ),
         )
+
+    def upsert(self, message: dict) -> None:
+        self._execute(message)
         self.db.conn.commit()
 
+    def upsert_no_commit(self, message: dict) -> None:
+        self._execute(message)
+
     def delete_by_session(self, session_id: str) -> None:
-        self.db.conn.execute("DELETE FROM message WHERE session_id=?", (session_id,))
+        self.delete_by_session_no_commit(session_id)
         self.db.conn.commit()
+
+    def delete_by_session_no_commit(self, session_id: str) -> None:
+        self.db.conn.execute("DELETE FROM message WHERE session_id=?", (session_id,))
 
     def delete_by_id(self, message_id: str) -> None:
         self.db.conn.execute("DELETE FROM message WHERE message_id=?", (message_id,))

@@ -33,6 +33,10 @@ class ConversationStateRepository:
         ).fetchone()
         return dict(row) if row else None
 
+    def count(self) -> int:
+        row = self.db.conn.execute("SELECT COUNT(*) AS n FROM conversation_state").fetchone()
+        return int(row["n"])
+
     def clear(self) -> None:
         self.db.conn.execute("DELETE FROM conversation_state")
         self.db.conn.commit()

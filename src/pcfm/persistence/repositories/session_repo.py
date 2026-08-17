@@ -8,7 +8,7 @@ class SessionRepository:
     def __init__(self, db) -> None:
         self.db = db
 
-    def upsert(self, session: dict) -> None:
+    def _execute(self, session: dict) -> None:
         self.db.conn.execute(
             "INSERT OR REPLACE INTO session "
             "(session_id, person_id, title, active, created_at, updated_at) "
@@ -22,7 +22,13 @@ class SessionRepository:
                 str(session.get("updated_at", "")),
             ),
         )
+
+    def upsert(self, session: dict) -> None:
+        self._execute(session)
         self.db.conn.commit()
+
+    def upsert_no_commit(self, session: dict) -> None:
+        self._execute(session)
 
     def get(self, session_id: str) -> dict | None:
         row = self.db.conn.execute("SELECT * FROM session WHERE session_id=?", (session_id,)).fetchone()

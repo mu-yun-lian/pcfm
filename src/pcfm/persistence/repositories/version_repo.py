@@ -39,21 +39,6 @@ class VersionRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_full_by_person(self, person_id: str) -> list[dict]:
-        """读路径: 从 data 列返回完整版本字典(SQLite 真相源)。"""
-        rows = self.db.conn.execute(
-            "SELECT data FROM version WHERE person_id=? ORDER BY version", (person_id,)
-        ).fetchall()
-        result = []
-        for row in rows:
-            try:
-                item = json.loads(row["data"])
-                if isinstance(item, dict):
-                    result.append(item)
-            except (ValueError, TypeError):
-                continue
-        return result
-
     def count(self) -> int:
         row = self.db.conn.execute("SELECT COUNT(*) AS n FROM version").fetchone()
         return int(row["n"])

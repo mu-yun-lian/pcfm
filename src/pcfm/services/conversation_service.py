@@ -72,8 +72,7 @@ class ConversationServiceMixin:
                 identity_note=identity_note,
                 focus_domain=focus_domain,
             )
-            if source_mode == "system_search":
-                self.collect_public_sources(person_id)
+            # 公开搜索不再在创建人物请求内同步执行; 由前端随后触发搜索任务
             return self.get_person(person_id)
 
     def conversation_summary(self, person_id: str) -> dict[str, object]:
@@ -84,9 +83,11 @@ class ConversationServiceMixin:
     def start_new_conversation(self, person_id: str) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(
+            result = self._conversation_call(
                 self.conversation.start_new_conversation, person_id
             )
+            self._sync_sessions_to_sqlite(person_id)
+            return result
 
     def list_sessions(self, person_id: str) -> list[dict[str, object]]:
         with self._person_lock(person_id):
@@ -96,22 +97,31 @@ class ConversationServiceMixin:
     def create_session(self, person_id: str) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(self.conversation.create_session, person_id)
+            result = self._conversation_call(self.conversation.create_session, person_id)
+            self._sync_sessions_to_sqlite(person_id)
+            return result
 
     def switch_session(self, person_id: str, session_id: str) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(self.conversation.switch_session, person_id, session_id)
+            result = self._conversation_call(self.conversation.switch_session, person_id, session_id)
+            self._sync_sessions_to_sqlite(person_id)
+            return result
 
     def rename_session(self, person_id: str, session_id: str, title: str) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(self.conversation.rename_session, person_id, session_id, title)
+            result = self._conversation_call(self.conversation.rename_session, person_id, session_id, title)
+            self._sync_sessions_to_sqlite(person_id)
+            return result
 
     def delete_session(self, person_id: str, session_id: str) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(self.conversation.delete_session, person_id, session_id)
+            result = self._conversation_call(self.conversation.delete_session, person_id, session_id)
+            self.message_repo.delete_by_session(session_id)
+            self._sync_sessions_to_sqlite(person_id)
+            return result
 
     def send_conversation_message(
         self,
@@ -153,8 +163,8 @@ class ConversationServiceMixin:
             )
             if _progress:
                 _progress(1.0, "done", "完成")
-            return result
             self._sync_messages_to_sqlite(person_id)
+            return result
 
     def create_optimization_candidate(
         self,

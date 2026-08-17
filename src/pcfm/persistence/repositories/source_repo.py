@@ -8,7 +8,7 @@ class SourceRepository:
     def __init__(self, db) -> None:
         self.db = db
 
-    def upsert(self, source: dict) -> None:
+    def _execute(self, source: dict) -> None:
         self.db.conn.execute(
             "INSERT OR REPLACE INTO source "
             "(source_id, person_id, title, source_type, format, source_url, filename, speaker, dataset_role, content_authenticity, review_status, content_hash, text_path, created_at, updated_at) "
@@ -31,7 +31,13 @@ class SourceRepository:
                 str(source.get("reviewed_at") or source.get("updated_at") or source.get("created_at", "")),
             ),
         )
+
+    def upsert(self, source: dict) -> None:
+        self._execute(source)
         self.db.conn.commit()
+
+    def upsert_no_commit(self, source: dict) -> None:
+        self._execute(source)
 
     def count(self) -> int:
         row = self.db.conn.execute("SELECT COUNT(*) AS n FROM source").fetchone()
