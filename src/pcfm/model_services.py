@@ -507,8 +507,20 @@ class ModelServiceManager:
             payload = self._json_request(item, "/api/tags")
             models = [str(value.get("name", "")) for value in payload.get("models", [])]
         else:
-            path = "/v1/models" if protocol == "anthropic" and not str(item["base_url"]).endswith("/v1") else "/models"
-            payload = self._json_request(item, path)
+            if protocol == "anthropic":
+                paths = ["/v1/models" if not str(item["base_url"]).endswith("/v1") else "/models"]
+            else:
+                paths = ["/models", "/v1/models"]
+            payload = None
+            last_error: ModelServiceError | None = None
+            for path in paths:
+                try:
+                    payload = self._json_request(item, path)
+                    break
+                except ModelServiceError as error:
+                    last_error = error
+            if payload is None:
+                raise last_error  # type: ignore[misc]
             models = [str(value.get("id", "")) for value in payload.get("data", [])]
         clean = sorted({value for value in models if value})
         services = self._services()
