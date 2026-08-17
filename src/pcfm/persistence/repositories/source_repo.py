@@ -37,6 +37,26 @@ class SourceRepository:
         row = self.db.conn.execute("SELECT COUNT(*) AS n FROM source").fetchone()
         return int(row["n"])
 
+    def source_counts(self, person_id: str) -> dict[str, int]:
+        """按人物的资料聚合计数(避免 light 列表全量读 JSON)。"""
+        row = self.db.conn.execute(
+            "SELECT "
+            "  COUNT(*) AS total, "
+            "  SUM(CASE WHEN review_status='confirmed' THEN 1 ELSE 0 END) AS confirmed, "
+            "  SUM(CASE WHEN review_status='pending' THEN 1 ELSE 0 END) AS pending, "
+            "  SUM(CASE WHEN review_status='confirmed' AND dataset_role='model_source' THEN 1 ELSE 0 END) AS model_source, "
+            "  SUM(CASE WHEN review_status='confirmed' AND dataset_role='final_holdout' THEN 1 ELSE 0 END) AS final_holdout "
+            "FROM source WHERE person_id=?",
+            (person_id,),
+        ).fetchone()
+        return {
+            "total": int(row["total"] or 0),
+            "confirmed": int(row["confirmed"] or 0),
+            "pending": int(row["pending"] or 0),
+            "model_source": int(row["model_source"] or 0),
+            "final_holdout": int(row["final_holdout"] or 0),
+        }
+
     def clear(self) -> None:
         self.db.conn.execute("DELETE FROM source")
         self.db.conn.commit()

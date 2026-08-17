@@ -80,6 +80,7 @@ class PcfmService(
         self.person_repo = PersonRepository(self.db)
         self.source_repo = SourceRepository(self.db)
         self.version_repo = VersionRepository(self.db)
+        self.conversation._source_repo = self.source_repo
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
         if seed_example and not any(self.people_dir.iterdir()):

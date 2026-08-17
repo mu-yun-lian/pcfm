@@ -117,15 +117,35 @@ class SummaryMixin:
 
     def summary(self, person_id: str, *, light: bool = False) -> dict[str, object]:
         profile = self.profile(person_id)
-        sources = self._list(person_id, "conversation_sources.json")
         state = self._state(person_id)
+        active = state.get("active_version")
+        if light:
+            sources: list[dict[str, object]] = []
+            confirmed: list[dict[str, object]] = []
+            repo = getattr(self, "_source_repo", None)
+            if repo is not None:
+                try:
+                    source_counts = repo.source_counts(person_id)
+                except Exception:
+                    source_counts = {"total": 0, "confirmed": 0, "pending": 0, "model_source": 0, "final_holdout": 0}
+            else:
+                source_counts = {"total": 0, "confirmed": 0, "pending": 0, "model_source": 0, "final_holdout": 0}
+        else:
+            sources = self._list(person_id, "conversation_sources.json")
+            confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
+            source_counts = {
+                "total": len(sources),
+                "confirmed": len(confirmed),
+                "pending": sum(item.get("review_status") == "pending" for item in sources),
+                "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in sources),
+                "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in sources),
+            }
         versions = [] if light else self._list(person_id, "conversation_versions.json")
         session_id = self._active_session_id(person_id)
         session = self._read_session(person_id, session_id)
-        messages = [dict(item) for item in session.get("messages", [])]
+        raw_messages = session.get("messages", [])
+        messages = [dict(raw_messages[-1])] if (light and raw_messages) else [dict(item) for item in raw_messages]
         candidates = [] if light else self._list(person_id, "optimization_candidates.json")
-        confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
-        active = state.get("active_version")
         if light:
             baseline_report = {
                 "status": "not_assessed",
@@ -162,13 +182,7 @@ class SummaryMixin:
             ),
             "messages": messages,
             "sources": [] if light else [self._source_public(item) for item in sources],
-            "source_counts": {
-                "total": len(sources),
-                "confirmed": len(confirmed),
-                "pending": sum(item.get("review_status") == "pending" for item in sources),
-                "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in sources),
-                "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in sources),
-            },
+            "source_counts": source_counts,
             "active_version": active,
             "dialogue_model_ref": str(state.get("dialogue_model_ref", "")),
             "dialogue_state": copy.deepcopy(dict(session.get("dialogue_state") or {})),
