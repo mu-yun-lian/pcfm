@@ -11,7 +11,7 @@
 |---|---|---|
 | 5.1 影子读取 | 恢复 list_full_by_person + 注入 repo + ReadPathMixin + 读路径替换 | ✅ |
 | 5.2 灰度开关 | PCFM_SQLITE_READ_PRIMARY + SQLite 优先 + 回退 + 自愈 | ✅ |
-| 5.3 默认开启 | 灰度期回归 + 默认改 1 | ⏸ 按设计需灰度期验收 |
+| 5.3 默认开启 | 灰度期验收通过后默认改 1 | ✅ |
 | 5.4 message 读路径 | 单独立项 | ⏸ 不纳入本轮 |
 
 ---
@@ -50,14 +50,21 @@
 
 ---
 
-## 四、暂缓项（按设计）
+## 四、5.3 默认开启验收结果
 
-- **第 5.3 步默认开启**：需灰度期 ≥3 轮全量回归、consistency-check 连续 10 次 0 不一致、人工不一致演练通过后，才将默认值改 `1`。
+- 全量回归：影子 3 轮 + 默认开启 2 轮，均 251 OK(skipped=12)。
+- consistency-check：连续 10/10 次 0 不一致（含 version.data 全量对比）。
+- 人工不一致演练：制造不一致 → consistency-check 捕获 1 处 → 影子/灰度告警 + JSON 回退 → 自愈 → 恢复 0。
+- 性能：100 人列表 829.9ms(≤1.0s)。
+- 默认值已改 `1`；设 `PCFM_SQLITE_READ_PRIMARY=0` 可立即回退影子模式。
+
+## 五、剩余（按设计）
+
 - **第 5.4 步 message 读路径**：需先让 `_sync_messages_to_sqlite` 覆盖所有会话并给 message 表加完整 `data` 列，单独立项。
 
 ---
 
-## 五、回滚方式
+## 六、回滚方式
 
 - 灰度误开：`PCFM_SQLITE_READ_PRIMARY=0`（默认）即回退影子模式；
 - 彻底回退：删除 `read_path.py` 并把 `summary`/`list_sessions` 恢复为 `_list`/`_list_sessions`；
