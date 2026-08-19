@@ -123,6 +123,10 @@ class Database:
         self._conn: sqlite3.Connection | None = None
 
     @property
+    def is_open(self) -> bool:
+        return self._conn is not None
+
+    @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             self._conn = sqlite3.connect(str(self.path), check_same_thread=False)

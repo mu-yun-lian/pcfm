@@ -2,9 +2,9 @@
 
 设计: docs/主线第5步SQLite读路径流程设计方案.md
 - 影子阶段(默认): 读 JSON + 对比 SQLite, 不一致只告警, 返回值始终 JSON。
-- 灰度阶段(PCFM_SQLITE_READ_PRIMARY=1): version 表有完整 data 列, 可返回 SQLite;
-  state/session 表只有关键字段(缺 rollback_history/message_count 等), 故仍返回 JSON,
-  但检测到不一致时触发自愈。
+- 灰度阶段(PCFM_SQLITE_READ_PRIMARY=1): 实际可切换范围只有 version(表有完整 data 列);
+  state/session 表只有关键字段(缺 rollback_history/message_count 等), 故做
+  "SQLite 对比 + 不一致自愈", 仍返回 JSON。
 """
 from __future__ import annotations
 
@@ -20,17 +20,17 @@ def _norm(value) -> str:
     return "" if value is None else str(value)
 
 
-def _log_fallback(person_id: str, table: str, reason: str) -> None:
+def _log_fallback(person_id: str, table: str, reason: str, exc_info: bool = False) -> None:
     logging.getLogger("pcfm").warning(
         "sqlite read fallback json person_id=%s table=%s reason=%s",
-        person_id, table, reason,
+        person_id, table, reason, exc_info=exc_info,
     )
 
 
 def _repo_open(repo) -> bool:
     """镜像库连接是否已打开(即是否发生过同步)。影子模式在库未打开时跳过对比, 避免无谓打开连接。"""
     db = getattr(repo, "db", None)
-    return db is not None and getattr(db, "_conn", None) is not None
+    return db is not None and db.is_open
 
 
 class ReadPathMixin:
@@ -63,7 +63,7 @@ class ReadPathMixin:
             sqlite_versions = repo.list_full_by_person(person_id)
         except Exception:
             if _sqlite_read_primary():
-                _log_fallback(person_id, "version", "read_error")
+                _log_fallback(person_id, "version", "read_error", exc_info=True)
             return json_versions
         if not sqlite_versions:
             if _sqlite_read_primary():
@@ -89,6 +89,8 @@ class ReadPathMixin:
         try:
             sqlite_row = repo.get(person_id)
         except Exception:
+            if _sqlite_read_primary():
+                _log_fallback(person_id, "state", "read_error", exc_info=True)
             return json_state
         if sqlite_row is None:
             if _sqlite_read_primary():
@@ -114,6 +116,8 @@ class ReadPathMixin:
         try:
             sqlite_rows = repo.list_by_person(person_id)
         except Exception:
+            if _sqlite_read_primary():
+                _log_fallback(person_id, "session", "read_error", exc_info=True)
             return json_sessions
         if not sqlite_rows:
             if _sqlite_read_primary():
@@ -127,10 +131,12 @@ class ReadPathMixin:
             if _sqlite_read_primary():
                 self._heal("sessions", person_id)
             return json_sessions
+        active_id = str(self._active_session_id(person_id))
         for sid, item in json_by_id.items():
             row = sqlite_by_id[sid]
             if _norm(row.get("title")) != _norm(item.get("title")) or \
-                    _norm(row.get("updated_at")) != _norm(item.get("updated_at")):
+                    _norm(row.get("updated_at")) != _norm(item.get("updated_at")) or \
+                    bool(row.get("active")) != (str(sid) == active_id):
                 _log_fallback(person_id, "session", "mismatch")
                 if _sqlite_read_primary():
                     self._heal("sessions", person_id)
