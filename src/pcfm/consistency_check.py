@@ -73,6 +73,11 @@ def _check_person(db, repos, person_dir: Path, person_id: str, problems: list[st
     if len(versions) != len(vrows):
         problems.append(f"version 数量不一致: json={len(versions)} sqlite={len(vrows)}")
     else:
+        # 全量 data 列对比(与读路径 list_full_by_person 同源), 校验完整版本字典一致
+        sqlite_full = repos["version"].list_full_by_person(person_id)
+        json_sorted = sorted(versions, key=lambda v: int(v.get("version", 0)))
+        if sqlite_full != json_sorted:
+            problems.append("version.data 全量与 JSON 不一致")
         for item in versions:
             vn = int(item.get("version", 0))
             r = vmap.get(vn)
