@@ -70,6 +70,19 @@ class WebAppTests(unittest.TestCase):
         status, health = self.json_request("/api/health")
         self.assertEqual((status, health["ok"]), (200, True))
 
+    def test_root_static_assets_served_with_correct_mime(self) -> None:
+        cases = [
+            ("/default-person-avatar.png", "image/png"),
+            ("/demo-barack-obama.svg", "image/svg+xml"),
+            ("/demo-sally-ride.svg", "image/svg+xml"),
+        ]
+        for path, expected_mime in cases:
+            status, headers, body = self.request(path)
+            self.assertEqual(status, 200, path)
+            content_type = headers.get("Content-Type", "")
+            self.assertTrue(content_type.startswith(expected_mime), f"{path}: {content_type}")
+            self.assertGreater(len(body), 0, path)
+
     def test_new_conversation_creates_switchable_session(self) -> None:
         status, created = self.json_request("/api/conversation/people", "POST", {"name": "Archive Chat"})
         self.assertEqual(status, 201)

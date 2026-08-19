@@ -197,11 +197,21 @@ def create_handler(service: PcfmService):
             relative = "index.html" if not parts else "/".join(parts)
             target = (root / relative).resolve()
             if root.resolve() not in target.parents or not target.is_file():
-                target = root / "index.html"
+                # dist 只含构建产物; 头像/演示 SVG 等静态资源仍位于 web_static 根目录。
+                legacy_target = (STATIC_DIR / relative).resolve()
+                if STATIC_DIR.resolve() in legacy_target.parents and legacy_target.is_file():
+                    target = legacy_target
+                else:
+                    target = root / "index.html"
             content = target.read_bytes()
             mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", f"{mime}; charset=utf-8" if mime.startswith("text/") or mime == "application/javascript" else mime)
+            self.send_header(
+                "Content-Type",
+                f"{mime}; charset=utf-8"
+                if mime.startswith("text/") or mime == "application/javascript"
+                else mime,
+            )
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Cache-Control", "no-cache")
             self.send_header("X-PCFM-Version", APP_VERSION)

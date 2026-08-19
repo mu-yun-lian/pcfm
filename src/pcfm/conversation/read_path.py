@@ -21,8 +21,9 @@ def _norm(value) -> str:
     return "" if value is None else str(value)
 
 
-def _log_fallback(person_id: str, table: str, reason: str, exc_info: bool = False) -> None:
-    logging.getLogger("pcfm").warning(
+def _log_fallback(person_id: str, table: str, reason: str, exc_info: bool = False, level: int = logging.WARNING) -> None:
+    logging.getLogger("pcfm").log(
+        level,
         "sqlite read fallback json person_id=%s table=%s reason=%s",
         person_id, table, reason, exc_info=exc_info,
     )
@@ -67,8 +68,8 @@ class ReadPathMixin:
                 _log_fallback(person_id, "version", "read_error", exc_info=True)
             return json_versions
         if not sqlite_versions:
-            if _sqlite_read_primary():
-                _log_fallback(person_id, "version", "empty")
+            if _sqlite_read_primary() and json_versions:
+                _log_fallback(person_id, "version", "empty", level=logging.INFO)
                 self._heal("versions", person_id)
             return json_versions
         if sqlite_versions != json_versions:
@@ -94,8 +95,15 @@ class ReadPathMixin:
                 _log_fallback(person_id, "state", "read_error", exc_info=True)
             return json_state
         if sqlite_row is None:
-            if _sqlite_read_primary():
-                _log_fallback(person_id, "state", "empty")
+            if (
+                _sqlite_read_primary()
+                and (
+                    json_state.get("active_version") is not None
+                    or json_state.get("active_session_id")
+                    or json_state.get("dialogue_model_ref")
+                )
+            ):
+                _log_fallback(person_id, "state", "empty", level=logging.INFO)
                 self._heal("state", person_id)
             return json_state
         for key in ("active_version", "active_session_id", "dialogue_model_ref"):
@@ -121,8 +129,8 @@ class ReadPathMixin:
                 _log_fallback(person_id, "session", "read_error", exc_info=True)
             return json_sessions
         if not sqlite_rows:
-            if _sqlite_read_primary():
-                _log_fallback(person_id, "session", "empty")
+            if _sqlite_read_primary() and json_sessions:
+                _log_fallback(person_id, "session", "empty", level=logging.INFO)
                 self._heal("sessions", person_id)
             return json_sessions
         json_by_id = {str(item.get("session_id", "")): item for item in json_sessions}
