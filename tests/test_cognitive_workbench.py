@@ -130,10 +130,13 @@ class CognitiveWorkbenchTests(unittest.TestCase):
         other = tempfile.TemporaryDirectory()
         try:
             restored = PcfmService(Path(other.name), seed_example=False)
-            restored.import_product_export(exported)
-            restored_detail = restored.get_person(self.person_id)
-            self.assertEqual(restored_detail["cognitive"]["latest_card"]["version"], 2)
-            self.assertEqual(restored_detail["cognitive"]["outcome_count"], 1)
+            try:
+                restored.import_product_export(exported)
+                restored_detail = restored.get_person(self.person_id)
+                self.assertEqual(restored_detail["cognitive"]["latest_card"]["version"], 2)
+                self.assertEqual(restored_detail["cognitive"]["outcome_count"], 1)
+            finally:
+                restored.close()
         finally:
             other.cleanup()
 

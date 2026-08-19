@@ -30,6 +30,7 @@ from .conversation.composing import ComposingMixin
 from .conversation.message_pipeline import MessagePipelineMixin
 from .conversation.reality_lookup import RealityLookupMixin
 from .conversation.optimization import OptimizationMixin
+from .conversation.read_path import ReadPathMixin
 from .conversation.summary import SummaryMixin
 
 
@@ -45,6 +46,7 @@ class ConversationWorkbench(
     RealityLookupMixin,
     OptimizationMixin,
     SummaryMixin,
+    ReadPathMixin,
 ):
     def __init__(
         self, people_dir: Path, *, model_services: ModelServiceManager | None = None

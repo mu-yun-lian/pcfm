@@ -85,6 +85,14 @@ class PcfmService(
         self.state_repo = ConversationStateRepository(self.db)
         self.conversation._source_repo = self.source_repo
         self.conversation._version_repo = self.version_repo
+        self.conversation._session_repo = self.session_repo
+        self.conversation._state_repo = self.state_repo
+        self.conversation._message_repo = self.message_repo
+        self.conversation._sync_callback = {
+            "versions": self._sync_versions_to_sqlite,
+            "sessions": self._sync_sessions_to_sqlite,
+            "state": self._sync_versions_to_sqlite,
+        }
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
         if seed_example and not any(self.people_dir.iterdir()):
@@ -312,7 +320,8 @@ class PcfmService(
         try:
             self._ensure_person_in_sqlite(person_id)
             active_id = self._conversation_call(self.conversation._active_session_id, person_id)
-            sessions = self._conversation_call(self.conversation.list_sessions, person_id)
+            # 用纯 JSON 读取(_list_sessions)构建镜像, 避免经 _read_sessions 的混合读触发自愈递归
+            sessions = self._conversation_call(self.conversation._list_sessions, person_id)
             with self.db.transaction():
                 self.session_repo.delete_by_person_no_commit(person_id)
                 for item in sessions:

@@ -117,7 +117,7 @@ class SummaryMixin:
 
     def summary(self, person_id: str, *, light: bool = False) -> dict[str, object]:
         profile = self.profile(person_id)
-        state = self._state(person_id)
+        state = self._read_state(person_id)
         active = state.get("active_version")
         if light:
             sources: list[dict[str, object]] = []
@@ -140,7 +140,7 @@ class SummaryMixin:
                 "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in sources),
                 "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in sources),
             }
-        versions = [] if light else self._list(person_id, "conversation_versions.json")
+        versions = [] if light else self._read_versions(person_id)
         session_id = self._active_session_id(person_id)
         session = self._read_session(person_id, session_id)
         raw_messages = session.get("messages", [])

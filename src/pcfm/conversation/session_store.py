@@ -178,7 +178,7 @@ class SessionStoreMixin:
 
     def list_sessions(self, person_id: str) -> list[dict[str, object]]:
         active = self._active_session_id(person_id)
-        return [self._session_meta(item, active) for item in self._list_sessions(person_id)]
+        return [self._session_meta(item, active) for item in self._read_sessions(person_id)]
 
     def create_session(self, person_id: str) -> dict[str, object]:
         self._migrate_sessions(person_id)
