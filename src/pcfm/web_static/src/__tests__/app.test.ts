@@ -67,3 +67,27 @@ describe('createPerson 系统搜索分支', () => {
     expect(store.toast?.error).toBe(true)
   })
 })
+
+describe('AI 助手不绑定人物对话模型', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('setDialogueModel 在助手下不调用 API', async () => {
+    const store = useAppStore()
+    store.person = { person_id: 'assistant', name: 'AI 助手', avatar: '' }
+    await store.setDialogueModel('srv:model')
+    expect(apiMock).not.toHaveBeenCalled()
+    expect(store.toast?.message).toContain('AI 助手')
+    expect(store.toast?.error).toBe(true)
+  })
+
+  it('clearDialogueModel 在助手下不调用 API', async () => {
+    const store = useAppStore()
+    store.person = { person_id: 'assistant', name: 'AI 助手', avatar: '' }
+    await store.clearDialogueModel()
+    expect(apiMock).not.toHaveBeenCalled()
+    expect(store.toast?.message).toContain('AI 助手')
+  })
+})

@@ -670,6 +670,10 @@ export const useAppStore = defineStore('app', {
 
     async setDialogueModel(modelRef: string) {
       if (!this.person) return
+      if (this.isAssistant) {
+        this.showToast('AI 助手不需要绑定人物对话模型；请选择具体人物后使用。', true)
+        return
+      }
       await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/model', {
         method: 'POST',
         body: JSON.stringify({ model_ref: modelRef }),
@@ -680,6 +684,10 @@ export const useAppStore = defineStore('app', {
     },
     async clearDialogueModel() {
       if (!this.person) return
+      if (this.isAssistant) {
+        this.showToast('AI 助手没有绑定人物对话模型，无需清除。')
+        return
+      }
       await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/model', {
         method: 'POST',
         body: JSON.stringify({ model_ref: '' }),
@@ -697,7 +705,11 @@ export const useAppStore = defineStore('app', {
       const job = await pollJob(data.job_id)
       const result = (job.result || {}) as any
       const verifiedForPerson =
-        action === 'test' && result.status === 'connected' && !!this.person && !!payload.model_id
+        action === 'test' &&
+        result.status === 'connected' &&
+        !!this.person &&
+        !this.isAssistant &&
+        !!payload.model_id
       if (verifiedForPerson && this.person) {
         const modelRef = serviceId + ':' + payload.model_id
         await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/model', {
@@ -708,7 +720,14 @@ export const useAppStore = defineStore('app', {
       }
       await this.loadModelServices()
       const failed = result.status === 'unavailable'
-      this.showToast(verifiedForPerson ? '真实调用验证成功，已用于当前人物。' : result.message || '模型列表已刷新。', failed)
+      this.showToast(
+        verifiedForPerson
+          ? '真实调用验证成功，已用于当前人物。'
+          : this.isAssistant && action === 'test' && result.status === 'connected'
+            ? '模型服务验证成功；AI 助手不绑定人物对话模型。'
+            : result.message || '模型列表已刷新。',
+        failed,
+      )
     },
 
     async submitModelService(body: Record<string, unknown>) {
@@ -742,7 +761,7 @@ export const useAppStore = defineStore('app', {
         })
         const testJob = await pollJob(testRes.job_id)
         const result = (testJob.result || {}) as any
-        if (result.status === 'connected' && this.person) {
+        if (result.status === 'connected' && this.person && !this.isAssistant) {
           const modelRef = serviceId + ':' + modelId
           await api('/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/model', {
             method: 'POST',
@@ -753,7 +772,13 @@ export const useAppStore = defineStore('app', {
         await this.loadModelServices()
         const ok = result.status === 'connected'
         this.showToast(
-          ok ? (this.person ? '已保存并自动验证，已用于当前人物。' : '已保存并自动验证通过。') : result.message || '已保存，但验证未通过。',
+          ok
+            ? this.isAssistant
+              ? '模型服务验证成功；AI 助手不绑定人物对话模型。'
+              : this.person
+                ? '已保存并自动验证，已用于当前人物。'
+                : '已保存并自动验证通过。'
+            : result.message || '已保存，但验证未通过。',
           !ok,
         )
       } catch (error) {

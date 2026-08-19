@@ -187,6 +187,10 @@ async function selectModel(ref: string) {
     store.showToast('请先选择一个人物。', true)
     return
   }
+  if (store.isAssistant) {
+    store.showToast('AI 助手不需要绑定人物对话模型；请选择具体人物后使用。', true)
+    return
+  }
   try {
     await store.setDialogueModel(ref)
   } catch (error) {
@@ -251,7 +255,7 @@ async function setRole(role: string, event: Event) {
       </div>
       <p class="plain-notice">只有通过真实对话调用验证的模型才可选择。添加供应商时选择类型即可自动填好地址与协议，只需填 API Key。</p>
 
-      <div class="model-current-row">
+      <div class="model-current-row" v-if="!store.isAssistant">
         <span>{{ currentStatusText }}</span>
         <button class="button quiet" type="button" :disabled="!store.person || !selectedRef" @click="clearDialogueModel">本人物不使用对话模型</button>
       </div>
@@ -330,6 +334,7 @@ async function setRole(role: string, event: Event) {
           <label><input v-model="form.enabled" type="checkbox" /> 启用此服务</label>
           <button class="button primary" type="submit" :disabled="formBusy">{{ formBusy ? '保存中…' : '只保存配置' }}</button>
         </form>
+        <p class="plain-notice">资料处理模型用于从原始资料中提取候选事件，必须配置并验证通过后才能使用。</p>
         <div class="model-role-grid">
           <label v-for="rs in roleSelects" :key="rs.role">
             {{ rs.label }}
