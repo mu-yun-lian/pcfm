@@ -13,7 +13,8 @@ import os
 
 
 def _sqlite_read_primary() -> bool:
-    return os.environ.get("PCFM_SQLITE_READ_PRIMARY", "0") == "1"
+    # 5.3 默认开启 SQLite 元数据读; 设 PCFM_SQLITE_READ_PRIMARY=0 可回退影子模式
+    return os.environ.get("PCFM_SQLITE_READ_PRIMARY", "1") == "1"
 
 
 def _norm(value) -> str:

@@ -54,8 +54,9 @@ class ReadPathTests(unittest.TestCase):
 
     def test_shadow_read_returns_json_and_logs_mismatch(self) -> None:
         self._corrupt_version_data()
-        with self.assertLogs("pcfm", level="WARNING") as captured:
-            result = self.service.conversation._read_versions(self.pid)
+        with mock.patch.dict(os.environ, {"PCFM_SQLITE_READ_PRIMARY": "0"}):
+            with self.assertLogs("pcfm", level="WARNING") as captured:
+                result = self.service.conversation._read_versions(self.pid)
         self.assertEqual(result, self._json_versions())
         self.assertTrue(any("mismatch" in line for line in captured.output))
 

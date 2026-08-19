@@ -3,8 +3,21 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import uuid
 from pathlib import Path
+
+
+def _replace_with_retry(tmp: Path, path: Path, attempts: int = 3) -> None:
+    """os.replace 到同一目标在 Windows 上偶发瞬时文件锁(PermissionError/FileNotFoundError), 重试吸收。"""
+    for attempt in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except (PermissionError, FileNotFoundError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def atomic_write_json(path: Path, value: object) -> None:
@@ -16,7 +29,7 @@ def atomic_write_json(path: Path, value: object) -> None:
             handle.write(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, path)
+        _replace_with_retry(tmp, path)
     except Exception:
         try:
             tmp.unlink(missing_ok=True)
