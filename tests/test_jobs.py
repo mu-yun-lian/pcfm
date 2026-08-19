@@ -22,25 +22,27 @@ class JobRunnerTests(unittest.TestCase):
         self.db.close()
         self.tmp.cleanup()
 
+    def _wait_status(self, job_id: str, status: str, timeout: float = 15.0):
+        """轮询直到任务达到指定状态或超时(高负载下线程池调度可能延迟)。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state = self.store.get(job_id)
+            if state is not None and state.status == status:
+                return state
+            time.sleep(0.02)
+        return self.store.get(job_id)
+
     def test_success(self) -> None:
         job = self.runner.submit("test", None, lambda progress=None, cancel=None: "ok")
-        for _ in range(50):
-            state = self.store.get(job.job_id)
-            if state.status == JobStatus.succeeded.value:
-                break
-            time.sleep(0.05)
-        self.assertEqual(self.store.get(job.job_id).status, JobStatus.succeeded.value)
-        self.assertEqual(self.store.get(job.job_id).progress, 1.0)
+        state = self._wait_status(job.job_id, JobStatus.succeeded.value)
+        self.assertEqual(state.status, JobStatus.succeeded.value)
+        self.assertEqual(state.progress, 1.0)
 
     def test_failure(self) -> None:
         def boom(progress=None, cancel=None):
             raise RuntimeError("坏了")
         job = self.runner.submit("test", None, boom)
-        for _ in range(50):
-            if self.store.get(job.job_id).status == JobStatus.failed.value:
-                break
-            time.sleep(0.05)
-        state = self.store.get(job.job_id)
+        state = self._wait_status(job.job_id, JobStatus.failed.value)
         self.assertEqual(state.status, JobStatus.failed.value)
         self.assertEqual(state.error_message, "坏了")
 
@@ -49,11 +51,8 @@ class JobRunnerTests(unittest.TestCase):
             progress(0.5, "half", "进行中")
             return {"done": True}
         job = self.runner.submit("test", None, work)
-        for _ in range(50):
-            if self.store.get(job.job_id).status == JobStatus.succeeded.value:
-                break
-            time.sleep(0.05)
-        self.assertEqual(self.store.get(job.job_id).result, {"done": True})
+        state = self._wait_status(job.job_id, JobStatus.succeeded.value)
+        self.assertEqual(state.result, {"done": True})
 
 
 if __name__ == "__main__":
