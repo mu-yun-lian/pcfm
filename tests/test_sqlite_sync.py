@@ -129,6 +129,48 @@ class SqliteSyncTests(unittest.TestCase):
         self.assertIn("data", columns)
         db.close()
 
+    def test_transaction_commit_failure_rolls_back(self) -> None:
+        import sqlite3
+        from unittest import mock
+
+        db = Database(Path(self.tmp.name) / "tx.db")
+        # sqlite3.Connection 的 commit/rollback 是只读 C 级属性, 无法 patch.object;
+        # 直接替换内部连接为 MagicMock, 只验证 transaction() 的异常传播与 rollback 调用。
+        db._conn = mock.MagicMock()
+        db._conn.commit.side_effect = sqlite3.OperationalError("disk full")
+        with self.assertRaises(sqlite3.OperationalError):
+            with db.transaction():
+                db._conn.execute("SELECT 1")
+        db._conn.rollback.assert_called_once()
+        db.close()
+
+    def test_sync_versions_deletes_stale_rows(self) -> None:
+        self._add_confirmed()
+        self.assertGreater(self.service.version_repo.count(), 0)
+        versions_path = self.service._person_dir(self.pid) / "conversation_versions.json"
+        versions_path.write_text("[]", encoding="utf-8")
+        self.service._sync_versions_to_sqlite(self.pid)
+        self.assertEqual(self.service.version_repo.list_by_person(self.pid), [])
+
+    def test_delete_person_ensures_person_row_before_archive(self) -> None:
+        self.service.person_repo.delete(self.pid)
+        self.assertIsNone(self.service.person_repo.get(self.pid))
+        self.service.delete_person(self.pid)
+        row = self.service.person_repo.get(self.pid)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["health"], "archived")
+
+    def test_restore_person_sqlite_sync_failure_is_non_blocking(self) -> None:
+        from unittest import mock
+
+        self.service.delete_person(self.pid)
+        with mock.patch.object(
+            self.service.person_repo, "upsert", side_effect=RuntimeError("db down")
+        ):
+            restored = self.service.restore_person(self.pid)
+        self.assertEqual(restored["person_id"], self.pid)
+        self.assertTrue((self.service._person_dir(self.pid) / "person.json").exists())
+
     def test_migrate_and_rollback_clear_all_tables(self) -> None:
         data_dir = Path(self.tmp.name)
         result = migrate(data_dir)

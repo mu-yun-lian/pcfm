@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from ._shared import *  # noqa: F401, F403
 from ._shared import (  # noqa: F401
     _as_choice,
@@ -49,7 +51,12 @@ class ArchiveServiceMixin:
             person.pop("archived_at", None)
             _write_json(source / "person.json", person)
             source.rename(target)
-            self.person_repo.upsert(person)
+            try:
+                self.person_repo.upsert(person)
+            except Exception:
+                logging.getLogger("pcfm").warning(
+                    "restore_person sqlite sync failed person_id=%s", person_id, exc_info=True
+                )
             return self.get_person(person_id)
 
     def permanently_delete_archived_person(

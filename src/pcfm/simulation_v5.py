@@ -1281,7 +1281,7 @@ class SimulationKernelV5:
                 continue
             if direction not in {"support", "oppose", "mixed", "conditional_support"}:
                 continue
-            atom_target = str(item.get("target", "")).strip()
+            atom_target = str(item.get("target_span", "") or item.get("target", "")).strip()
             if target and atom_target and (
                 target.casefold() not in atom_target.casefold()
                 and atom_target.casefold() not in target.casefold()

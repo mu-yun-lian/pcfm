@@ -275,6 +275,7 @@ class PersonServiceMixin:
             person = self._require_person(person_id)
             person["archived_at"] = _utc_now()
             _write_json(directory / "person.json", person)
+            self._ensure_person_in_sqlite(person_id)
             self.person_repo.mark_archived(person_id, person["archived_at"])
             directory.rename(target)
 

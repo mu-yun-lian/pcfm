@@ -296,6 +296,7 @@ class PcfmService(
                 "updated_at": str(state.get("updated_at", "")),
             }
             with self.db.transaction():
+                self.version_repo.delete_by_person_no_commit(person_id)
                 for item in versions:
                     record = dict(item)
                     record["person_id"] = person_id

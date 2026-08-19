@@ -33,6 +33,9 @@ class VersionRepository:
     def upsert_no_commit(self, version: dict) -> None:
         self._execute(version)
 
+    def delete_by_person_no_commit(self, person_id: str) -> None:
+        self.db.conn.execute("DELETE FROM version WHERE person_id=?", (person_id,))
+
     def list_by_person(self, person_id: str) -> list[dict]:
         rows = self.db.conn.execute(
             "SELECT * FROM version WHERE person_id=? ORDER BY version", (person_id,)

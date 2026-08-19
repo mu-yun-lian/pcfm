@@ -326,6 +326,7 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                     "tendency_type": str(tradeoff.get("tendency_type", "")),
                     "direction": str(tradeoff.get("direction", "")),
                     "target": str(tradeoff.get("target", "")),
+                    "target_span": str(tradeoff.get("target_span", "")),
                     "protected_interest_id": protected,
                     "accepted_cost_id": cost,
                     "protected_interest_span": protected_span,
@@ -377,6 +378,7 @@ def _preference_atoms(frames: Sequence[Mapping[str, object]]) -> tuple[list[dict
                     "tendency_type": str(tradeoff.get("tendency_type", "")),
                     "direction": str(tradeoff.get("direction", "")),
                     "target": str(tradeoff.get("target", "")),
+                    "target_span": str(tradeoff.get("target_span", "")),
                     "event_structure_type": str(
                         dict(frame["decision_frame"]).get("event_structure_type", "")
                     ),

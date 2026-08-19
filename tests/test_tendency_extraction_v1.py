@@ -181,7 +181,7 @@ class EvaluationExtractionModel:
                                     "accepted_cost_span": "",
                                     "evidence_span": "unfit to serve as President",
                                     "direction": "oppose",
-                                    "target": "the Republican nominee",
+                                    "target": "individual",
                                     "target_span": "the Republican nominee",
                                 }
                             ],
@@ -205,7 +205,6 @@ class EvaluationProjectionTests(unittest.TestCase):
         self.service.close()
         self.temporary.cleanup()
 
-    @unittest.skip("评估类倾向校验(target 应为 OBJECT_CATEGORIES 类别)与用例的具体实体期望尚未对齐")
     def test_evaluation_tendency_drives_object_evaluation(self) -> None:
         person_id = str(self.alice["person_id"])
         self.service.conversation._model_services = EvaluationExtractionModel()
@@ -236,9 +235,12 @@ class EvaluationProjectionTests(unittest.TestCase):
         atom = model["reviewed_public_model"]["preference_atoms"][0]
         self.assertEqual("oppose", atom["direction"])
         self.assertEqual("behavior_evaluation", atom["tendency_type"])
-        self.assertEqual("the Republican nominee", atom["target"])
-        # 宽评价问题走对象评价投影，输出反对方向
-        reply = self.service.send_conversation_message(person_id, "你认为特朗普怎么样")
+        self.assertEqual("individual", atom["target"])
+        self.assertEqual("the Republican nominee", atom["target_span"])
+        # 宽评价问题走对象评价投影，输出反对方向(同语言同实体)
+        reply = self.service.send_conversation_message(
+            person_id, "What do you think of the Republican nominee?"
+        )
         self.assertEqual("object_evaluation_projection_answer", reply["answer_status"])
         stance = reply["structured_prediction"]["stance"]["label"]
         self.assertEqual("oppose", stance)
