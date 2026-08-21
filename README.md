@@ -1,4 +1,4 @@
-# PCFM 人物对话系统
+﻿# PCFM 人物对话系统
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -92,11 +92,11 @@ python -m pcfm.webapp --data-dir <你的数据目录>
 
 **对话主界面** — 左侧人物列表，中间对话区，回答附带依据入口：
 
-![对话主界面](docs/assets/screenshot-chat.png)
+![对话主界面](docs/assets/screenshot-chat.jpg)
 
 **依据抽屉** — 每条回答可展开查看本次规划、证据引用与验证调用次数：
 
-![依据抽屉](docs/assets/screenshot-evidence-drawer.png)
+![依据抽屉](docs/assets/screenshot-evidence-drawer.jpg)
 
 ---
 
