@@ -1,6 +1,6 @@
 """PCFM 对话式人物模拟（网页产品）。研究阶段旧模块已隔离到 legacy/。"""
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 APP_VERSION = f"{__version__}-simulation-v5"
 
 from .applicability import ApplicabilityProfile, PredictionRefusedError, TemporalStability
