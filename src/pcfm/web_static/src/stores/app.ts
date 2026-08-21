@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, pollJob } from '../api/client'
+import { sourceIsTrainable } from '../lib/labels'
 import type {
   Person,
   Conversation,
@@ -62,6 +63,9 @@ export const useAppStore = defineStore('app', {
     },
     currentName(): string {
       return this.person?.name || this.people.find((p) => p.person_id === this.person?.person_id)?.name || '当前人物'
+    },
+    materialProcessingModelRef(state): string {
+      return state.modelServices.roles.material_processing || ''
     },
   },
 
@@ -158,7 +162,7 @@ export const useAppStore = defineStore('app', {
     async selectPerson(personId: string) {
       const [personData, conversationData] = await Promise.all([
         api<{ person: Person }>('/api/people/' + encodeURIComponent(personId)),
-        api<{ conversation: Conversation }>('/api/people/' + encodeURIComponent(personId) + '/conversation'),
+        api<{ conversation: Conversation }>('/api/people/' + encodeURIComponent(personId) + '/conversation?light=1&full_messages=1'),
       ])
       this.person = personData.person
       this.conversation = conversationData.conversation
@@ -190,12 +194,25 @@ export const useAppStore = defineStore('app', {
       this.conversation = data.conversation
     },
 
-    async refreshConversation() {
+    async refreshConversation(full = false) {
       if (!this.person) return
+      const query = full ? 'full=1' : 'light=1&full_messages=1'
       const data = await api<{ conversation: Conversation }>(
-        '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation',
+        '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation?' + query,
       )
-      this.conversation = data.conversation
+      if (full) {
+        this.conversation = data.conversation
+      } else {
+        const prev = this.conversation
+        const next = data.conversation
+        this.conversation = {
+          ...next,
+          // light 摘要会把来源列表清空、把 public_response_model 计数归零；
+          // 保留此前全量加载的重字段，避免「模型状态」面板计数与资料列表被清空。
+          sources: prev && prev.sources && prev.sources.length ? prev.sources : next.sources,
+          public_response_model: prev && prev.public_response_model ? prev.public_response_model : next.public_response_model,
+        }
+      }
       const summary = this.people.find((p) => p.person_id === this.person!.person_id)
       if (summary && this.conversation) {
         summary.conversation_version = this.conversation.active_version ?? null
@@ -207,6 +224,10 @@ export const useAppStore = defineStore('app', {
       }
       await this.loadSessions()
     },
+      async loadFullConversation() {
+        if (!this.person || this.isAssistant) return
+        await this.refreshConversation(true)
+      },
 
     async sendMessage(text: string, lookup: boolean) {
       const person = this.person
@@ -314,7 +335,7 @@ export const useAppStore = defineStore('app', {
         this.showToast(action === 'reference' ? '已仅保存为参考，未修改模型。' : '已标记为不是同一个问题。')
       }
       this.closeComparison()
-      await this.refreshConversation()
+      await this.refreshConversation(true)
       this.activeDialog = 'sources'
     },
 
@@ -335,7 +356,7 @@ export const useAppStore = defineStore('app', {
         { method: 'POST', body: JSON.stringify({ decision }) },
       )
       this.showToast(decision === 'confirmed' ? '资料已确认；只有参数训练资料会形成新的探索性版本。' : '资料已拒绝。')
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
 
     async extractSource(sourceId: string) {
@@ -345,7 +366,7 @@ export const useAppStore = defineStore('app', {
         { method: 'POST', body: '{}' },
       )
       await pollJob(data.job_id)
-      await this.refreshConversation()
+      await this.refreshConversation(true)
       this.showToast('候选已生成，仍需逐条核对原文位置后才能进入模型。')
     },
 
@@ -355,7 +376,7 @@ export const useAppStore = defineStore('app', {
         '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources/' + encodeURIComponent(sourceId) + '/candidates/' + encodeURIComponent(candidateId) + '/review',
         { method: 'POST', body: JSON.stringify({ decision }) },
       )
-      await this.refreshConversation()
+      await this.refreshConversation(true)
       this.showToast(decision === 'confirmed' ? '候选已与原文逐字核对并形成新人物版本。' : '候选已拒绝。', false)
     },
 
@@ -398,18 +419,36 @@ export const useAppStore = defineStore('app', {
       if (!this.person || !this.conversation) return
       this.startProgressPolling()
       const base = '/api/people/' + encodeURIComponent(this.person.person_id) + '/conversation/sources'
+      const extractionAvailable = !!this.materialProcessingModelRef
       try {
+        let confirmedSourceCount = 0
         for (const source of this.conversation?.sources || []) {
           if (source.review_status === 'pending') {
             await api(base + '/' + encodeURIComponent(source.source_id) + '/review', {
               method: 'POST',
               body: JSON.stringify({ decision: 'confirmed' }),
             })
+            confirmedSourceCount++
           }
         }
-        await this.refreshConversation()
-        for (const source of this.conversation?.sources || []) {
-          if (source.review_status === 'confirmed' && !(source.llm_response_event_candidates || []).length) {
+        await this.refreshConversation(true)
+        if (!extractionAvailable) {
+          this.showToast(
+            confirmedSourceCount
+              ? '已确认 ' + confirmedSourceCount + ' 份资料。配置资料处理模型后，才能自动提取待审核事件候选。'
+              : '没有待确认的资料。配置资料处理模型后，才能自动提取待审核事件候选。',
+          )
+          return
+        }
+        // 只在可训练的已确认来源上提取候选，非训练材料直接跳过，避免白花 LLM 费用
+        const confirmedSources = (this.conversation?.sources || []).filter(
+          (s) => s.review_status === 'confirmed',
+        )
+        const trainable = confirmedSources.filter((s) => sourceIsTrainable(s))
+        const referenceOnly = confirmedSources.filter((s) => !sourceIsTrainable(s))
+
+        for (const source of trainable) {
+          if (!(source.llm_response_event_candidates || []).length) {
             const extractRes = await api<{ job_id: string }>(
               base + '/' + encodeURIComponent(source.source_id) + '/extract-candidates',
               { method: 'POST', body: '{}' },
@@ -417,9 +456,14 @@ export const useAppStore = defineStore('app', {
             await pollJob(extractRes.job_id)
           }
         }
-        await this.refreshConversation()
+        await this.refreshConversation(true)
+
+        // 提取后候选挂在 refreshConversation 刷出的新对象上；trainable 是提取前的旧引用，必须重读。
+        const freshTrainable = (this.conversation?.sources || []).filter(
+          (s) => s.review_status === 'confirmed' && sourceIsTrainable(s),
+        )
         let confirmed = 0
-        for (const source of this.conversation?.sources || []) {
+        for (const source of freshTrainable) {
           for (const candidate of source.llm_response_event_candidates || []) {
             if ((candidate.review_status || 'pending') === 'pending') {
               await api(
@@ -430,8 +474,18 @@ export const useAppStore = defineStore('app', {
             }
           }
         }
-        await this.refreshConversation()
-        this.showToast(confirmed ? '处理完成：确认 ' + confirmed + ' 条候选，已形成新人物版本。' : '处理完成：没有待确认的候选。')
+        await this.refreshConversation(true)
+
+        const skipNote = referenceOnly.length
+          ? `；${referenceOnly.length} 份资料已转入参考路径（作为背景与检索对照）`
+          : ''
+        this.showToast(
+          confirmed
+            ? `处理完成：确认 ${confirmed} 条候选并形成版本${skipNote}。`
+            : referenceOnly.length
+              ? `处理完成：${referenceOnly.length} 份资料已转入参考路径（正确位置，作为背景与检索对照）；要进入训练标签需补 逐字核验 + 来源位置 + 来源网址。`
+              : '处理完成：没有待确认的候选。',
+        )
       } catch (error) {
         this.showToast((error as Error).message, true)
       } finally {
@@ -452,7 +506,7 @@ export const useAppStore = defineStore('app', {
       } else {
         this.showToast('候选已处理，当前版本未改变。')
       }
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
 
     async reviewOptimizationStyle(candidateId: string, decision: string) {
@@ -468,7 +522,7 @@ export const useAppStore = defineStore('app', {
           : '表达样本已单独拒绝，内容模型不受影响。',
         status === 'failed_validation',
       )
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
 
     async rollbackVersion(version: number) {
@@ -478,7 +532,7 @@ export const useAppStore = defineStore('app', {
         body: '{}',
       })
       this.showToast('已回退到版本 v' + version + '。')
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
 
     async submitTextSource(body: Record<string, unknown>) {
@@ -488,7 +542,7 @@ export const useAppStore = defineStore('app', {
         body: JSON.stringify(body),
       })
       this.showToast('资料已保存为待审核，尚未进入人物版本。')
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
     async submitFileSource(body: Record<string, unknown>) {
       if (!this.person) return
@@ -498,7 +552,7 @@ export const useAppStore = defineStore('app', {
       })
       await pollJob(res.job_id)
       this.showToast('文件已按事件候选整理并进入待审核队列。')
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
     async submitUrlSource(body: Record<string, unknown>) {
       if (!this.person) return
@@ -508,7 +562,7 @@ export const useAppStore = defineStore('app', {
       })
       await pollJob(res.job_id)
       this.showToast('网页快照已按事件候选整理并进入待审核队列。')
-      await this.refreshConversation()
+      await this.refreshConversation(true)
     },
 
     async submitPerson(body: Record<string, unknown>) {

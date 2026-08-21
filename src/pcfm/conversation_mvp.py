@@ -26,6 +26,7 @@ from .conversation.extraction import ExtractionMixin
 from .conversation.version_builder import VersionBuilderMixin
 from .conversation.rendering import RenderingMixin
 from .conversation.verdict import VerdictMixin
+from .conversation.profile_narration import ProfileNarrationMixin
 from .conversation.composing import ComposingMixin
 from .conversation.message_pipeline import MessagePipelineMixin
 from .conversation.reality_lookup import RealityLookupMixin
@@ -41,6 +42,7 @@ class ConversationWorkbench(
     VersionBuilderMixin,
     RenderingMixin,
     VerdictMixin,
+    ProfileNarrationMixin,
     ComposingMixin,
     MessagePipelineMixin,
     RealityLookupMixin,

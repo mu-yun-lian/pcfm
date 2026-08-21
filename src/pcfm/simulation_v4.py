@@ -91,6 +91,19 @@ OBJECT_CATEGORIES: tuple[str, ...] = (
     "abstract_concept",  # 抽象概念（金钱、价值观、理念）
 )
 
+# 知识原子的 7 类封闭分类（对齐 ARCHITECTURE.md §3.3 / 设计方案 §3.2）。
+# 当前确定性派生只识别「人物公开主张」类，默认落 "fact"（事实判断）；
+# LLM 驱动的 7 类细分为后续增强，词表先固定供候选/校验使用。
+KNOWLEDGE_TYPES: tuple[str, ...] = (
+    "fact",                   # 事实判断
+    "procedural",             # 程序
+    "professional",           # 专业
+    "autobiographical",       # 自传
+    "social",                 # 社会
+    "causal",                 # 因果
+    "conceptual_framework",   # 概念框架
+)
+
 
 class SimulationV4Error(ValueError):
     pass
@@ -229,6 +242,7 @@ def _frame(
     tradeoffs: Sequence[Mapping[str, object]] = (),
     demonstrated_claim_spans: Sequence[str] = (),
     event_structure_type: str = "",
+    inferred_tendencies: Sequence[Mapping[str, object]] = (),
 ) -> dict[str, object]:
     source_id = str(source["source_id"])
     event_id = f"event-v4-{_hash([source_id, locator, question, response])[:16]}"
@@ -257,6 +271,9 @@ def _frame(
             "event_structure_type": event_structure_type,
             "conditions": sorted({str(value) for value in conditions if str(value).strip()}),
             "observed_tradeoffs": [copy.deepcopy(dict(value)) for value in tradeoffs],
+            "inferred_tendencies": [
+                copy.deepcopy(dict(value)) for value in inferred_tendencies
+            ],
         },
         "observed_response": {
             "verbatim": response,
@@ -335,6 +352,30 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                     "semantic_status": "human_confirmed_model_candidate",
                 }
             )
+        clean_inferred: list[dict[str, object]] = []
+        for inferred_index, raw_inferred in enumerate(item.get("inferred_tendencies", []), start=1):
+            if not isinstance(raw_inferred, Mapping):
+                continue
+            inferred = dict(raw_inferred)
+            protected = str(inferred.get("protected_interest_id", "")).strip()
+            cost = str(inferred.get("accepted_cost_id", "")).strip()
+            evidence_span = str(inferred.get("evidence_span", "")).strip()
+            valid = (
+                protected in INTERESTS
+                and (not cost or cost in INTERESTS)
+                and _contains(source_text, evidence_span)
+            )
+            if not valid:
+                rejected.append(f"reviewed:{index}:inferred:{inferred_index}:ungrounded")
+                continue
+            clean_inferred.append(
+                {
+                    "protected_interest_id": protected,
+                    "accepted_cost_id": cost,
+                    "evidence_span": evidence_span,
+                    "status": "inferred_public_tendency_not_explicit",
+                }
+            )
         frames.append(
             _frame(
                 source,
@@ -350,6 +391,7 @@ def _reviewed_frames(source: Mapping[str, object]) -> tuple[list[dict[str, objec
                 tradeoffs=clean_tradeoffs,
                 demonstrated_claim_spans=[str(value) for value in item.get("demonstrated_claim_spans", [])],
                 event_structure_type=str(item.get("event_structure_type", "")),
+                inferred_tendencies=clean_inferred,
             )
         )
     return frames, rejected
@@ -399,6 +441,90 @@ def _preference_atoms(frames: Sequence[Mapping[str, object]]) -> tuple[list[dict
             )
     atoms.sort(key=lambda item: str(item["preference_atom_id"]))
     return atoms, rejected
+
+
+def _statement_atoms(frames: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
+    """从无取舍的事件派生「公开表态」原子（方向未结构化，不造取舍）。
+
+    对齐设计方案验收 #4：缺「代价」的事仍能作为「公开表态」落原子，
+    不报错、不拒收。有取舍的事件仍走 _preference_atoms，不重复落。
+    """
+    atoms: list[dict[str, object]] = []
+    for frame in frames:
+        tradeoffs = list(dict(frame["decision_frame"]).get("observed_tradeoffs", []))
+        if tradeoffs:
+            continue
+        response = str(dict(frame["observed_response"]).get("verbatim", "")).strip()
+        if not response:
+            continue
+        atoms.append(
+            {
+                "statement_atom_id": f"statement-v4-{_hash([frame['event_frame_id'], response])[:16]}",
+                "event_frame_id": str(frame["event_frame_id"]),
+                "source_id": str(frame["source_id"]),
+                "source_lineage": str(frame["source_lineage"]),
+                "statement": response,
+                "domain_tags": list(frame.get("domain_tags", [])),
+                "role": str(dict(frame["social_context"]).get("speaker_role", "unknown")),
+                "response_time": str(dict(frame["temporal_context"]).get("response_time", "")),
+                "conditions": list(dict(frame["decision_frame"]).get("conditions", [])),
+                "reasons": list(dict(frame["observed_response"]).get("reasons", [])),
+                "evidence_span": response,
+                "status": "reviewed_public_statement_without_tradeoff",
+                "interpretation_boundary": "public_statement_not_value_or_direction",
+            }
+        )
+    atoms.sort(key=lambda item: str(item["statement_atom_id"]))
+    return atoms
+
+
+def _inferred_value_atoms(
+    frames: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    """从 LLM 推断的隐含价值倾向派生原子（origin=inferred，不参与确定预测）。
+
+    对齐设计方案验收：推断必须给逐字 evidence_span + 封闭词表，标
+    inferred_public_tendency_not_explicit。
+    """
+    atoms: list[dict[str, object]] = []
+    for frame in frames:
+        tendencies = list(
+            dict(frame["decision_frame"]).get("inferred_tendencies", [])
+        )
+        for tendency in tendencies:
+            if not isinstance(tendency, Mapping):
+                continue
+            protected = str(tendency.get("protected_interest_id", "")).strip()
+            cost = str(tendency.get("accepted_cost_id", "")).strip()
+            evidence_span = str(tendency.get("evidence_span", "")).strip()
+            if not protected or protected not in INTERESTS:
+                continue
+            if cost and cost not in INTERESTS:
+                continue
+            atoms.append(
+                {
+                    "preference_atom_id": f"inferred-v4-{_hash([frame['event_frame_id'], protected, cost, evidence_span])[:16]}",
+                    "tendency_type": "",
+                    "direction": "support",
+                    "target": "",
+                    "event_frame_id": str(frame["event_frame_id"]),
+                    "source_id": str(frame["source_id"]),
+                    "source_lineage": str(frame["source_lineage"]),
+                    "protected_interest_id": protected,
+                    "accepted_cost_id": cost,
+                    "conditions": list(dict(frame["decision_frame"]).get("conditions", [])),
+                    "reasons": list(dict(frame["observed_response"]).get("reasons", [])),
+                    "domain_tags": list(frame.get("domain_tags", [])),
+                    "role": str(dict(frame["social_context"]).get("speaker_role", "unknown")),
+                    "response_time": str(dict(frame["temporal_context"]).get("response_time", "")),
+                    "evidence_span": evidence_span,
+                    "status": "inferred_public_tendency_not_explicit",
+                    "origin": "inferred",
+                    "interpretation_boundary": "inferred_public_tendency_not_explicit",
+                }
+            )
+    atoms.sort(key=lambda item: str(item["preference_atom_id"]))
+    return atoms
 
 
 def _structures(atoms: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
@@ -528,6 +654,7 @@ class SimulationKernelV4:
                 {
                     "knowledge_claim_id": f"knowledge-v4-{_hash([frame['event_frame_id'], span])[:16]}",
                     "statement": span,
+                    "knowledge_type": "fact",
                     "event_frame_id": str(frame["event_frame_id"]),
                     "source_id": str(frame["source_id"]),
                     "domain_tags": list(frame.get("domain_tags", [])),

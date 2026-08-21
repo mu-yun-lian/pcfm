@@ -167,7 +167,7 @@ class ModelValidation:
     calibration_error: float | None
     personalization_passed: bool
     mechanism_probe_nll_uplift: float | None
-    mechanism_adequacy_passed: bool
+    mechanism_adequacy_passed: bool | None
     temporal_stability_status: str
     temporal_drift_score: float | None
     temporal_critical_score_z: float | None
@@ -194,7 +194,7 @@ class ModelValidation:
             calibration_error=None,
             personalization_passed=False,
             mechanism_probe_nll_uplift=None,
-            mechanism_adequacy_passed=False,
+            mechanism_adequacy_passed=None,
             temporal_stability_status="not_assessed",
             temporal_drift_score=None,
             temporal_critical_score_z=None,
@@ -257,13 +257,19 @@ class ModelValidation:
             self.nll_uplift_ci_lower,
             self.nll_uplift_ci_upper,
             self.calibration_error,
-            self.mechanism_probe_nll_uplift,
         )
         if any(
             value is None or not math.isfinite(value)
             for value in numeric_values
         ):
             raise ValueError("validated model requires finite diagnostics")
+        if self.mechanism_adequacy_passed is not None and (
+            self.mechanism_probe_nll_uplift is None
+            or not math.isfinite(self.mechanism_probe_nll_uplift)
+        ):
+            raise ValueError(
+                "assessed mechanism adequacy requires a finite probe uplift"
+            )
         if self.personal_nll < 0 or self.population_nll < 0:
             raise ValueError("validation log loss cannot be negative")
         if not 0 <= self.calibration_error <= 1:
@@ -322,7 +328,7 @@ class ModelValidation:
             )
         if self.status == "passed" and (
             not self.personalization_passed
-            or not self.mechanism_adequacy_passed
+            or self.mechanism_adequacy_passed is False
             or self.temporal_drift_detected
             or self.temporal_stability_status != "stable"
             or self.reasons
@@ -760,8 +766,10 @@ def bundle_from_dict(data: dict[str, object]) -> PersonModelBundle:
                     is not None
                     else None
                 ),
-                mechanism_adequacy_passed=bool(
-                    validation["mechanism_adequacy_passed"]
+                mechanism_adequacy_passed=(
+                    bool(validation["mechanism_adequacy_passed"])
+                    if validation.get("mechanism_adequacy_passed") is not None
+                    else None
                 ),
                 temporal_stability_status=str(
                     validation["temporal_stability_status"]

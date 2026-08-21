@@ -136,10 +136,13 @@ def create_handler(service: PcfmService):
                     and parts[:2] == ["api", "people"]
                     and parts[3] == "conversation"
                 ):
+                    light = "light=1" in urlparse(self.path).query
+                    full_messages = "full_messages=1" in urlparse(self.path).query
+                    full = "full=1" in urlparse(self.path).query
                     self._send_json(
                         {
                             "ok": True,
-                            "conversation": service.conversation_summary(parts[2]),
+                            "conversation": service.conversation_summary(parts[2], light=light and not full, full_messages=full_messages and not full),
                         }
                     )
                     return
@@ -158,7 +161,7 @@ def create_handler(service: PcfmService):
                     self._send_json({"ok": True, "sessions": service.list_sessions(parts[2])})
                     return
                 if len(parts) == 3 and parts[:2] == ["api", "people"]:
-                    self._send_json({"ok": True, "person": service.get_person(parts[2])})
+                    self._send_json({"ok": True, "person": service.get_person_light(parts[2])})
                     return
                 if len(parts) == 5 and parts[:2] == ["api", "people"] and parts[3:] == ["history", "template.csv"]:
                     rendered = service.csv_template(parts[2]).encode("utf-8-sig")

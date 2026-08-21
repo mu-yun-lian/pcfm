@@ -75,10 +75,10 @@ class ConversationServiceMixin:
             # 公开搜索不再在创建人物请求内同步执行; 由前端随后触发搜索任务
             return self.get_person(person_id)
 
-    def conversation_summary(self, person_id: str) -> dict[str, object]:
+    def conversation_summary(self, person_id: str, *, light: bool = False, full_messages: bool = False) -> dict[str, object]:
         with self._person_lock(person_id):
             self._require_person(person_id)
-            return self._conversation_call(self.conversation.summary, person_id)
+            return self._conversation_call(self.conversation.summary, person_id, light=light, full_messages=full_messages)
 
     def start_new_conversation(self, person_id: str) -> dict[str, object]:
         with self._person_lock(person_id):

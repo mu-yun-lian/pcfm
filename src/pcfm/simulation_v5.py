@@ -5,8 +5,9 @@ import re
 from datetime import datetime, timezone
 from typing import Mapping, Sequence
 
-from .response_prediction import EVALUATION_TENDENCY_TYPES
+from .response_prediction import APPLICABILITY_STOPWORDS, EVALUATION_TENDENCY_TYPES
 from .response_prediction_v2 import ResponsePredictionKernelV2
+from .conversation.domain_profile import build_domain_profiles
 from .simulation_v4 import (
     DOMAIN_ALIASES,
     INTERESTS,
@@ -19,6 +20,8 @@ from .simulation_v4 import (
     _contains,
     _normal,
     _similarity,
+    _statement_atoms,
+    _inferred_value_atoms,
     _terms,
 )
 
@@ -27,7 +30,7 @@ MODEL_SCHEMA_V5 = "pcfm-conversation-conditioned-model-v5"
 PREDICTION_SCHEMA_V5 = "pcfm-conversation-conditioned-prediction-v5"
 FROZEN_CONTRACT_V5 = "pcfm-frozen-content-contract-v5"
 KERNEL_ID_V5 = "simulation-v5"
-MODEL_BUILD_V5 = "reviewed-source-entity-index-v3"
+MODEL_BUILD_V5 = "reviewed-source-entity-index-v4"
 
 SCENARIO_EFFECTS = frozenset({"advances", "constrains", "threatens", "neutral"})
 MODEL_AUTHORITY_FIELDS = frozenset(
@@ -167,12 +170,42 @@ def _episode_frames(
 
 
 def _value_atoms(frames: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
-    """Extract observable public salience only; never infer a private value."""
+    """Extract observable public salience only; never infer a private value.
+
+    弱语义判定改造：优先采用 LLM 候选的 protected_interest_id（明写取舍），
+    关键词扫描 _interest_mentions 仅作兜底（「提到 ≠ 重视」）。
+    """
     atoms: list[dict[str, object]] = []
     for raw in frames:
         frame = dict(raw)
         response = str(dict(frame["observed_response"]).get("verbatim", ""))
         seen: set[str] = set()
+        # 优先：事件明写取舍的 protected_interest_id（LLM 候选，已过封闭词表门禁）
+        for tradeoff in dict(frame["decision_frame"]).get("observed_tradeoffs", []):
+            interest_id = str(tradeoff.get("protected_interest_id", "")).strip()
+            if not interest_id or interest_id not in INTERESTS or interest_id in seen:
+                continue
+            seen.add(interest_id)
+            atoms.append(
+                {
+                    "value_atom_id": f"value-v5-{_hash([frame['event_frame_id'], interest_id])[:16]}",
+                    "event_frame_id": str(frame["event_frame_id"]),
+                    "source_id": str(frame["source_id"]),
+                    "source_lineage": str(frame["source_lineage"]),
+                    "interest_id": interest_id,
+                    "evidence_span": str(tradeoff.get("evidence_span", "")),
+                    "domain_tags": list(map(str, frame.get("domain_tags", []))),
+                    "role": str(dict(frame["social_context"]).get("speaker_role", "unknown")),
+                    "response_time": str(
+                        dict(frame["temporal_context"]).get("response_time", "")
+                    ),
+                    "status": "deterministic_explicit_public_salience",
+                    "interpretation_boundary": (
+                        "observable_public_wording_not_private_value_or_direction"
+                    ),
+                }
+            )
+        # 兜底：关键词扫描
         for mention in _interest_mentions(response):
             interest_id = str(mention["interest_id"])
             if interest_id in seen:
@@ -265,70 +298,10 @@ def _value_orientations(
         )
     return orientations
 
-def _domain_tendency_index(
-    preference_atoms: Sequence[Mapping[str, object]],
-) -> dict[str, dict[str, dict[str, object]]]:
-    """构建 A 层「领域价值倾向」画像。
 
-    结构：领域 → 事件结构（细分类型）→ {价值倾向概括 + 具体原子(B层)}。
-    - 价值倾向概括：该细分下这个人倾向什么（主导价值）、反对/支持什么对象类别。
-    - 具体原子：该细分下的伴随原子（含原话），供回答时"落回 B 层找同类内容"。
-    这是"所有伴随原子综合出该领域的价值倾向"——不是一句话，而是
-    按细分类型组织的结构化倾向，每个细分能回溯到具体原子。
-    """
-    from collections import Counter
 
-    profile: dict[str, dict[str, dict[str, object]]] = {}
-    for atom in preference_atoms:
-        domains = atom.get("domain_tags", [])
-        if not domains:
-            continue
-        structure = str(atom.get("event_structure_type", "") or "unclassified")
-        atom_id = str(atom.get("preference_atom_id", ""))
-        reason = str((atom.get("reasons") or [""])[0])[:160]
-        direction = str(atom.get("direction", ""))
-        target = str(atom.get("target", "").strip())
-        for domain in domains:
-            cell = profile.setdefault(str(domain), {}).setdefault(
-                structure,
-                {
-                    "values": Counter(),
-                    "opposes": set(),
-                    "supports": set(),
-                    "atoms": [],
-                },
-            )
-            cell["values"][str(atom.get("protected_interest_id", ""))] += 1
-            if direction == "oppose" and target:
-                cell["opposes"].add(target)
-            elif direction == "support" and target:
-                cell["supports"].add(target)
-            cell["atoms"].append(
-                {
-                    "atom_id": atom_id,
-                    "tendency_type": str(atom.get("tendency_type", "")),
-                    "direction": direction,
-                    "target": target,
-                    "protected_interest_id": str(atom.get("protected_interest_id", "")),
-                    "accepted_cost_id": str(atom.get("accepted_cost_id", "")),
-                    "reason": reason or str(atom.get("evidence_span", ""))[:160],
-                }
-            )
-    result: dict[str, dict[str, dict[str, object]]] = {}
-    for domain, structures in profile.items():
-        result[domain] = {}
-        for structure, cell in structures.items():
-            result[domain][structure] = {
-                "dominant_value": (
-                    max(cell["values"], key=lambda k: cell["values"][k])
-                    if cell["values"]
-                    else ""
-                ),
-                "opposes": sorted(cell["opposes"]),
-                "supports": sorted(cell["supports"]),
-                "atoms": cell["atoms"],
-            }
-    return result
+
+
 
 
 
@@ -404,8 +377,12 @@ class SimulationKernelV5:
         )
         value_atoms = _value_atoms(episode_frames)
         value_orientation_index = _value_orientations(value_atoms)
-        domain_tendency_index = _domain_tendency_index(
-            list(reviewed.get("preference_atoms", []))
+        preference_atoms = list(reviewed.get("preference_atoms", []))
+        knowledge_claims = copy.deepcopy(list(reviewed.get("knowledge_claims", [])))
+        statement_atoms = _statement_atoms(list(reviewed.get("event_frames", [])))
+        inferred_value_atoms = _inferred_value_atoms(list(reviewed.get("event_frames", [])))
+        domain_profiles = build_domain_profiles(
+            preference_atoms, statement_atoms, knowledge_claims, inferred_value_atoms
         )
         payload = {
             "reviewed_public_model": reviewed,
@@ -415,11 +392,39 @@ class SimulationKernelV5:
             ),
             "value_atoms": value_atoms,
             "value_orientation_index": value_orientation_index,
-            "domain_tendency_index": domain_tendency_index,
-            "knowledge_claims": copy.deepcopy(
-                list(reviewed.get("knowledge_claims", []))
-            ),
+            "domain_profiles": domain_profiles,
+            "statement_atoms": statement_atoms,
+            "inferred_value_atoms": inferred_value_atoms,
+            "knowledge_claims": knowledge_claims,
         }
+        active_components = [
+            "reviewed_response_episodes_v5",
+            "conversation_state_v1",
+            "public_orientation_projection_v1",
+            "event_public_salience_v1",
+            "domain_profile_v1",
+            "bounded_natural_response_v1",
+        ]
+        components = [
+            {"component_id": "reviewed_response_episodes_v5", "status": "active"},
+            {"component_id": "conversation_state_v1", "status": "active"},
+            {
+                "component_id": "public_orientation_projection_v1",
+                "status": "active_exploratory_accuracy_not_assessed",
+            },
+            {
+                "component_id": "event_public_salience_v1",
+                "status": "active_exploratory_not_private_value",
+            },
+            {
+                "component_id": "domain_profile_v1",
+                "status": "active_exploratory_accuracy_not_assessed",
+            },
+            {"component_id": "simulation_v4", "status": "frozen_evidence_submodel"},
+            {"component_id": "response_kernel_v2", "status": "frozen_baseline_only"},
+        ]
+        validation_status = "implemented_exploratory_accuracy_not_assessed"
+        accuracy_claim = "none"
         artifact: dict[str, object] = {
             "schema_version": MODEL_SCHEMA_V5,
             "kernel": KERNEL_ID_V5,
@@ -436,31 +441,23 @@ class SimulationKernelV5:
                     "value_atoms": payload["value_atoms"],
                     "value_orientation_index": payload["value_orientation_index"],
                     "knowledge_claims": payload["knowledge_claims"],
+                    "statement_atoms": payload["statement_atoms"],
+                    "domain_profiles": payload["domain_profiles"],
+                    "inferred_value_atoms": payload["inferred_value_atoms"],
+                    # 关键字段并入摘要：防改 validation_status/scope 等后重算 artifact_hash 双过。
+                    "person_id": str(person_id),
+                    "version": int(version),
+                    "scope": copy.deepcopy(dict(scope or {})),
+                    "validation_status": validation_status,
+                    "accuracy_claim": accuracy_claim,
+                    "active_components": copy.deepcopy(active_components),
+                    "components": copy.deepcopy(components),
                 }
             ),
-            "active_components": [
-                "reviewed_response_episodes_v5",
-                "conversation_state_v1",
-                "public_orientation_projection_v1",
-                "event_public_salience_v1",
-                "bounded_natural_response_v1",
-            ],
-            "components": [
-                {"component_id": "reviewed_response_episodes_v5", "status": "active"},
-                {"component_id": "conversation_state_v1", "status": "active"},
-                {
-                    "component_id": "public_orientation_projection_v1",
-                    "status": "active_exploratory_accuracy_not_assessed",
-                },
-                {
-                    "component_id": "event_public_salience_v1",
-                    "status": "active_exploratory_not_private_value",
-                },
-                {"component_id": "simulation_v4", "status": "frozen_evidence_submodel"},
-                {"component_id": "response_kernel_v2", "status": "frozen_baseline_only"},
-            ],
-            "validation_status": "implemented_exploratory_accuracy_not_assessed",
-            "accuracy_claim": "none",
+            "active_components": active_components,
+            "components": components,
+            "validation_status": validation_status,
+            "accuracy_claim": accuracy_claim,
         }
         artifact["artifact_hash"] = _hash(artifact)
         return artifact
@@ -490,6 +487,18 @@ class SimulationKernelV5:
                 artifact.get("value_orientation_index")
             ),
             "knowledge_claims": copy.deepcopy(artifact.get("knowledge_claims")),
+            "statement_atoms": copy.deepcopy(artifact.get("statement_atoms")),
+            "domain_profiles": copy.deepcopy(artifact.get("domain_profiles")),
+            "inferred_value_atoms": copy.deepcopy(
+                artifact.get("inferred_value_atoms")
+            ),
+            "person_id": str(artifact.get("person_id", "")),
+            "version": int(artifact.get("version", 0)),
+            "scope": copy.deepcopy(artifact.get("scope")),
+            "validation_status": str(artifact.get("validation_status", "")),
+            "accuracy_claim": str(artifact.get("accuracy_claim", "")),
+            "active_components": copy.deepcopy(artifact.get("active_components")),
+            "components": copy.deepcopy(artifact.get("components")),
         }
         if _hash(payload) != artifact.get("semantic_model_digest"):
             raise SimulationV5Error("simulation_v5_semantic_payload_mismatch")
@@ -969,21 +978,33 @@ class SimulationKernelV5:
                 & set(map(str, query["domain_ids"]))
             )
         ]
-        if not selected_frames and query["domain_ids"]:
+        if not selected_frames:
             domains = set(map(str, query["domain_ids"]))
             query_terms = _terms(str(query["combined_query"]))
+            content_query_terms = query_terms - APPLICABILITY_STOPWORDS
             related = []
             for frame in frames:
-                if not domains & set(map(str, frame.get("domain_tags", []))):
+                # 领域匹配只在 query 已解析出领域时作为前置过滤。
+                if domains and not domains & set(map(str, frame.get("domain_tags", []))):
                     continue
-                candidate_text = (
-                    f"{dict(frame['decision_frame']).get('trigger', '')} "
-                    f"{dict(frame['observed_response']).get('verbatim', '')}"
-                )
+                trigger = str(dict(frame["decision_frame"]).get("trigger", ""))
+                verbatim = str(dict(frame["observed_response"]).get("verbatim", ""))
+                candidate_text = f"{trigger} {verbatim}"
                 if len(query_terms & _terms(candidate_text)) < 2:
                     continue
-                score = _similarity(str(query["combined_query"]), candidate_text)
-                if score >= 0.15:
+                if domains:
+                    score = _similarity(str(query["combined_query"]), candidate_text)
+                    min_score = 0.15
+                else:
+                    # 领域缺失（常见于英文/口语提问）时，以 trigger 相似度为主门槛：
+                    # trigger 是事件触发场景，与提问语义最对齐，且不受长 verbatim 稀释；
+                    # 词重叠必须是内容词（剔除 what/would/you/do 等高频词），
+                    # 避免宽泛动词/代词造成的无关事件误检。
+                    if not content_query_terms & _terms(trigger):
+                        continue
+                    score = _similarity(str(query["combined_query"]), trigger)
+                    min_score = 0.30
+                if score >= min_score:
                     related.append((score, str(frame["event_frame_id"]), frame))
             related.sort(key=lambda value: (-value[0], value[1]))
             selected_frames = [value[2] for value in related[:3]]
@@ -1023,6 +1044,29 @@ class SimulationKernelV5:
                     "prediction_path": "similar_event_evidence",
                     "selected_event_ids": event_ids,
                 },
+            )
+        domain_profile = self._domain_profile_projection(artifact, query)
+        if domain_profile is not None:
+            return self._result(
+                artifact,
+                answer_status="domain_profile_answer",
+                speech_act="direct_answer",
+                stance="neutral",
+                claims=[str(domain_profile["statement"])],
+                reasons=[],
+                uncertainties=["这是该领域公开表态的综合归纳，不构成对当前情境的确定预测。"],
+                evidence_event_ids=list(map(str, domain_profile["evidence_event_ids"])),
+                response_basis={
+                    "path": "domain_profile_projection",
+                    "person_prediction_status": "domain_profile_projection",
+                    "query_frame": query,
+                    "projection_kind": domain_profile["projection_kind"],
+                    "domains": domain_profile["domains"],
+                    "prediction_statement": str(domain_profile["statement"]),
+                },
+                applicability="domain_public_tendency_synthesis",
+                support=0.0,
+                trace={**trace, "prediction_path": "domain_profile_projection"},
             )
         if _is_person_opinion_request(clean):
             return self._result(
@@ -1070,6 +1114,74 @@ class SimulationKernelV5:
             support=0.0,
             trace={**trace, "prediction_path": "general_assisted"},
         )
+
+    @staticmethod
+    def _domain_profile_projection(
+        artifact: Mapping[str, object], query: Mapping[str, object]
+    ) -> dict[str, object] | None:
+        """用领域整体画像回答（§6）：提问落领域后用 DomainProfile 综合公开倾向。
+
+        只在提问带领域、且该领域画像非空时触发；不新增立场，只综合已有原子。
+        """
+        domains = set(map(str, query.get("domain_ids", [])))
+        profiles = dict(artifact.get("domain_profiles") or {})
+        matched = [dict(profiles[value]) for value in sorted(domains) if value in profiles]
+        if not matched:
+            return None
+        values = [item for profile in matched for item in profile.get("values", [])]
+        ideas = [item for profile in matched for item in profile.get("ideas", [])]
+        strategies = [item for profile in matched for item in profile.get("strategies", [])]
+        if not (values or ideas or strategies):
+            return None
+        event_ids = sorted(
+            {
+                str(event_id)
+                for profile in matched
+                for item in [
+                    *profile.get("values", []),
+                    *profile.get("ideas", []),
+                    *profile.get("strategies", []),
+                    *profile.get("conditions", []),
+                ]
+                for event_id in item.get("event_ids", [])
+            }
+        )
+        Chinese = bool(re.search(r"[\u4e00-\u9fff]", str(query["query"])))
+        statements: list[str] = []
+        for item in values[:3]:
+            protected = str(item.get("preferred_side", "")).strip()
+            cost = str(item.get("sacrificed_side", "")).strip()
+            if not protected:
+                continue
+            if Chinese:
+                protected_label = (
+                    str(INTERESTS[protected]["label_zh"]) if protected in INTERESTS else protected
+                )
+                cost_label = str(INTERESTS[cost]["label_zh"]) if cost in INTERESTS else cost
+                statements.append(f"更看重{protected_label}而不是{cost_label}")
+            else:
+                statements.append(
+                    f"prioritizes {protected.replace('_', ' ')} over {cost.replace('_', ' ')}"
+                )
+        for item in ideas:
+            public = str(item.get("public_statement", "")).strip()
+            # 中文问题：英文逐字 public_statement 不翻译（破坏逐字溯源），
+            # 硬拼接时只保留已中文化的 statements，避免中英混杂的 fallback。
+            if public and (not Chinese or re.search(r"[\u4e00-\u9fff]", public)):
+                statements.append(public)
+        for item in strategies[:2]:
+            statement = str(item.get("statement", "")).strip()
+            if statement and (not Chinese or re.search(r"[\u4e00-\u9fff]", statement)):
+                statements.append(statement)
+        if not statements:
+            return None
+        return {
+            "statement": "；".join(statements[:4]),
+            "evidence_event_ids": event_ids,
+            "domains": sorted(domains),
+            "projection_kind": "domain_profile_public_tendency_synthesis",
+            "support": 0.0,
+        }
 
     @staticmethod
     def _orientation_projection(

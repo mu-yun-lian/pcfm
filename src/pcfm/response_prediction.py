@@ -377,10 +377,15 @@ def _event_completeness(
 
 
 def _event_semantics(
-    *, question: str, answer: str, source: Mapping[str, object]
+    *,
+    question: str,
+    answer: str,
+    source: Mapping[str, object],
+    llm_stance: str = "",
 ) -> dict[str, object]:
     claims, reasons, uncertainties = _content_units(answer)
-    stance = _stance(answer)
+    # LLM 候选优先（经封闭词表校验），关键词正则仅兜底（弱语义判定改造）。
+    stance = llm_stance if llm_stance in STANCES else _stance(answer)
     event_types = classify_event_types(
         question,
         answer,
@@ -526,7 +531,12 @@ def response_events_from_source(source: Mapping[str, object]) -> list[dict[str, 
         answer = str(qa.get("answer", "")).strip()
         if not question or not answer:
             continue
-        semantics = _event_semantics(question=question, answer=answer, source=source)
+        semantics = _event_semantics(
+            question=question,
+            answer=answer,
+            source=source,
+            llm_stance=str(qa.get("llm_stance", "")),
+        )
         event = {
             "schema_version": EVENT_SCHEMA,
             "event_id": f"response-{canonical_hash([source_id, index, question, answer])[:16]}",

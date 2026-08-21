@@ -115,7 +115,7 @@ class SummaryMixin:
             self._simulation_model(person_id, active_version), holdouts
         )
 
-    def summary(self, person_id: str, *, light: bool = False) -> dict[str, object]:
+    def summary(self, person_id: str, *, light: bool = False, full_messages: bool = False) -> dict[str, object]:
         profile = self.profile(person_id)
         state = self._read_state(person_id)
         active = state.get("active_version")
@@ -123,13 +123,31 @@ class SummaryMixin:
             sources: list[dict[str, object]] = []
             confirmed: list[dict[str, object]] = []
             repo = getattr(self, "_source_repo", None)
+            source_counts: dict[str, int] | None = None
             if repo is not None:
                 try:
                     source_counts = repo.source_counts(person_id)
                 except Exception:
-                    source_counts = {"total": 0, "confirmed": 0, "pending": 0, "model_source": 0, "final_holdout": 0}
-            else:
-                source_counts = {"total": 0, "confirmed": 0, "pending": 0, "model_source": 0, "final_holdout": 0}
+                    source_counts = None
+            json_sources = self._list(person_id, "conversation_sources.json")
+            if source_counts is None or (
+                source_counts.get("total", 0) == 0 and json_sources
+            ):
+                # SQLite 与 JSON 真相源不一致（或读取异常）→ 回退 JSON 重算 + 触发自愈，
+                # 避免旧版本升级且来源未再变动的人物持续显示 0。
+                source_counts = {
+                    "total": len(json_sources),
+                    "confirmed": sum(item.get("review_status") == "confirmed" for item in json_sources),
+                    "pending": sum(item.get("review_status") == "pending" for item in json_sources),
+                    "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in json_sources),
+                    "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in json_sources),
+                }
+                sync = getattr(self, "_sync_callback", None)
+                if sync and sync.get("sources") and repo is not None:
+                    try:
+                        sync["sources"](person_id)
+                    except Exception:
+                        pass
         else:
             sources = self._list(person_id, "conversation_sources.json")
             confirmed = [item for item in sources if item.get("review_status") == "confirmed"]
@@ -140,12 +158,12 @@ class SummaryMixin:
                 "model_source": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "model_source" for item in sources),
                 "final_holdout": sum(item.get("review_status") == "confirmed" and item.get("dataset_role") == "final_holdout" for item in sources),
             }
-        versions = [] if light else self._read_versions(person_id)
+        versions = self._read_versions(person_id)
         session_id = self._active_session_id(person_id)
         session = self._read_session(person_id, session_id)
         raw_messages = session.get("messages", [])
-        messages = [dict(raw_messages[-1])] if (light and raw_messages) else [dict(item) for item in raw_messages]
-        candidates = [] if light else self._list(person_id, "optimization_candidates.json")
+        messages = [dict(raw_messages[-1])] if (light and not full_messages and raw_messages) else [dict(item) for item in raw_messages]
+        candidates = self._list(person_id, "optimization_candidates.json")
         if light:
             baseline_report = {
                 "status": "not_assessed",

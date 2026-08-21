@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAppStore } from '../stores/app'
 import type { CollectionState } from '../types'
 
 const store = useAppStore()
+const menuEl = ref<HTMLDetailsElement>()
+
+function closeMenu() {
+  if (menuEl.value?.open) menuEl.value.open = false
+}
 
 const avatarSrc = computed(() => store.person?.avatar || '/default-person-avatar.png')
 const personName = computed(() => (store.isAssistant ? 'AI 助手' : store.person?.name || ''))
@@ -34,20 +39,19 @@ const collectionStatusText = computed(() => {
   }
   const modelView = conv?.public_response_model || {}
   const stepHint = conv?.active_version ? '' : ' 还差几步就能对话：加材料 → 「一键处理全部材料」→ 形成版本。'
+  // 轻量摘要会把 public_response_model 计数归零；此时不展示误导性的「0 个事件原子」。
+  const countsLine = (modelView.event_frame_count || 0) > 0
+    ? ' 当前模拟层：' +
+      (modelView.event_frame_count || 0) + ' 个事件原子、' +
+      (modelView.value_atom_count || 0) + ' 个单事件公开取向原子、' +
+      (modelView.value_orientation_count || 0) + ' 个聚合公开取向、' +
+      (modelView.preference_structure_count || 0) + ' 个明确取舍结构、' +
+      (modelView.knowledge_claim_count || 0) + ' 条人物公开使用的知识主张。'
+    : ' 当前模拟层计数需打开「人物资料」后查看。'
   return (
     (messages[collection.status || ''] || collection.message || '资料状态尚未记录。') +
     stepHint +
-    ' 当前模拟层：' +
-    (modelView.event_frame_count || 0) +
-    ' 个事件原子、' +
-    (modelView.value_atom_count || 0) +
-    ' 个单事件公开取向原子、' +
-    (modelView.value_orientation_count || 0) +
-    ' 个聚合公开取向、' +
-    (modelView.preference_structure_count || 0) +
-    ' 个明确取舍结构、' +
-    (modelView.knowledge_claim_count || 0) +
-    ' 条人物公开使用的知识主张。'
+    countsLine
   )
 })
 
@@ -100,9 +104,9 @@ function openModelPicker() {
       >
         {{ store.conversation?.status_text }}
       </span>
-      <details class="menu">
+      <details ref="menuEl" class="menu">
         <summary aria-label="更多操作">⋯</summary>
-        <div class="menu-body">
+        <div class="menu-body" @click="closeMenu">
           <button type="button" @click="store.openDialog('newConversation')">新对话</button>
           <button type="button" @click="store.openDialog('sources')">人物资料</button>
           <button type="button" @click="store.openDialog('versions')">版本</button>

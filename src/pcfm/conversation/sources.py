@@ -20,6 +20,7 @@ from ._shared import (  # noqa: F401
     _utc_now,
     _write_json,
 )
+from ..response_prediction import TRAINABLE_AUTHENTICITY
 
 
 
@@ -383,10 +384,31 @@ class SourcesMixin:
                 str(person["name"]),
                 [str(value) for value in profile.get("aliases", [])],
             )
-            if not any(
+            has_confirmed_event = any(
                 event.get("label_status") == "confirmed_response_weak_semantic_labels"
                 for event in item["response_events"]
-            ) and item.get("speaker_scope") != "mixed_speakers":
+            )
+            # 训练资格改为「形式资格」（逐字/可溯源/说话人），而非「确定性推导是否已产出回应事件」：
+            # 本人逐字且可溯源的材料即使暂时没被自动切出问答，也应保留 model_source，
+            # 等待「一件事」提取；只有形式不合格才降级为参考（材料三路分流 §7）。
+            allowed_speakers = {
+                str(person["name"]).casefold(),
+                *(str(value).casefold() for value in profile.get("aliases", [])),
+            }
+            form_eligible = (
+                str(item.get("content_authenticity", "")) in TRAINABLE_AUTHENTICITY
+                and bool(
+                    str(item.get("source_url", "")).strip()
+                    or str(item.get("filename", "")).strip()
+                )
+                and bool(str(item.get("source_locator", "")).strip())
+                and str(item.get("speaker", "")).casefold() in allowed_speakers
+            )
+            if (
+                not has_confirmed_event
+                and not form_eligible
+                and item.get("speaker_scope") != "mixed_speakers"
+            ):
                 previous_role = str(item.get("dataset_role", "reference_only"))
                 if previous_role != "reference_only":
                     item.setdefault("role_history", []).append(

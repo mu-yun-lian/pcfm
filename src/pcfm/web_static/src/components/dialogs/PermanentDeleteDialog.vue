@@ -9,6 +9,7 @@ const nameInput = ref('')
 const busy = ref(false)
 
 const target = computed(() => store.permanentDeleteTarget)
+const nameMatches = computed(() => !!target.value && nameInput.value.trim() === target.value.name)
 
 async function confirm() {
   if (!target.value) return
@@ -34,7 +35,7 @@ async function confirm() {
       <label>请输入人物名称以确认<input v-model="nameInput" autocomplete="off" /></label>
       <div class="dialog-actions">
         <button type="button" class="button quiet" @click="close">取消</button>
-        <button type="button" class="button primary danger" :disabled="busy" @click="confirm">{{ busy ? '处理中…' : '永久删除' }}</button>
+        <button type="button" class="button primary danger" :disabled="busy || !nameMatches" @click="confirm">{{ busy ? '处理中…' : '永久删除' }}</button>
       </div>
     </div>
   </dialog>

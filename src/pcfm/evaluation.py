@@ -206,9 +206,9 @@ def cross_fitted_mechanism_probe(
     observations: Sequence[Observation],
     base_probabilities: Sequence[float],
     feature_names: Sequence[str],
-) -> float:
+) -> float | None:
     if len(observations) < 20:
-        return 0.0
+        return None
     nonlinear = _nonlinear_features(observations, feature_names)
     choices = np.asarray(
         [observation.actual_choice for observation in observations],
@@ -308,8 +308,14 @@ def assess_person_validation(
         personalization_reasons.append("calibration_error_too_high")
 
     mechanism_reasons = []
-    if mechanism_probe_uplift > maximum_mechanism_probe_uplift:
+    if mechanism_probe_uplift is None:
+        # 样本不足（<20）无法评估机制充分性 → 标 not_assessed，不冒充通过。
+        mechanism_adequacy_passed: bool | None = None
+    elif mechanism_probe_uplift > maximum_mechanism_probe_uplift:
         mechanism_reasons.append("mechanism_misspecification_suspected")
+        mechanism_adequacy_passed = False
+    else:
+        mechanism_adequacy_passed = True
 
     return {
         "personal_report": personal_report,
@@ -320,7 +326,7 @@ def assess_person_validation(
         "personalization_passed": not personalization_reasons,
         "personalization_reasons": personalization_reasons,
         "mechanism_probe_nll_uplift": mechanism_probe_uplift,
-        "mechanism_adequacy_passed": not mechanism_reasons,
+        "mechanism_adequacy_passed": mechanism_adequacy_passed,
         "mechanism_reasons": mechanism_reasons,
         "passed": not personalization_reasons and not mechanism_reasons,
     }

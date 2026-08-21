@@ -20,6 +20,26 @@ from ._shared import (  # noqa: F401
     _utc_now,
     _write_json,
 )
+from .profile_narration import _abstract_domain_profiles
+from ..expression_renderer import (
+    CONTRACTION_NEGATION_PATTERN,
+    MODAL_TOKENS,
+    NEGATION_TOKENS,
+)
+
+
+def _negation_modality_key(text: str) -> tuple[object, ...]:
+    lowered = text.casefold()
+
+    def _count(token: str) -> int:
+        # 中文否定/模态词连续书写，\w 边界匹配不到（"不支持"里的"不"），改子串计数；
+        # 英文词保留 \w 边界（避免 "no" 误中 "now"）。
+        if re.search(r"[\u4e00-\u9fff]", token):
+            return lowered.count(token)
+        return len(re.findall(rf"(?<!\w){re.escape(token)}(?!\w)", lowered))
+
+    counts = tuple((token, _count(token)) for token in NEGATION_TOKENS + MODAL_TOKENS)
+    return (counts, len(CONTRACTION_NEGATION_PATTERN.findall(lowered)))
 
 
 class VerdictMixin:
@@ -61,16 +81,14 @@ class VerdictMixin:
                 )
                 if part
             )
-        # 领域倾向画像：领域 → 该领域的价值倾向，供 LLM 定位领域并匹配。
-        # 这是建模阶段预构建的整体倾向（分领域），回答时按领域"查"，不现算。
-        # 只给抽象倾向（剥掉逐字原话 reason），原话走 evidence 回填，避免照抄/漏专名。
-        domain_tendency_index = _derivation_view(artifact.get("domain_tendency_index", {}))
-        # 回答语言随问题语言：中文问题必须中文回答，不被英文材料带偏。
+        # 领域画像：domain_profiles 是唯一价值真相源，供 LLM 定位领域并匹配。
+        # 只给抽象字段（剥逐字 evidence_span），原话走 evidence 回填，避免照抄/漏专名。
         is_chinese = bool(re.search(r"[\u4e00-\u9fff]", str(text)))
         response_language = "Chinese" if is_chinese else "English"
-        # 中文问题时把抽象字段也本地化成中文，使 LLM 上下文以中文为主。
-        if is_chinese:
-            domain_tendency_index = _localize_view(domain_tendency_index)
+        profiles = dict(artifact.get("domain_profiles") or {})
+        domain_profiles = _abstract_domain_profiles(
+            profiles, sorted(profiles.keys()), is_chinese
+        )
         payload = {
             "person_identity": identity_note,
             "question": text,
@@ -81,7 +99,7 @@ class VerdictMixin:
                 if item.get("role") in {"user", "assistant"}
             ],
             "conversation_state": copy.deepcopy(dict(conversation_context or {})),
-            "domain_tendency_index": domain_tendency_index,
+            "domain_profiles": domain_profiles,
             "allowed_tendency_types": (
                 sorted(TENDENCY_TYPE_ZH.values())
                 if is_chinese
@@ -101,22 +119,22 @@ class VerdictMixin:
         }
         system = (
             "You are generating a first-person response for a modeled real person. "
-            "domain_tendency_index is this person's value-tendency profile: "
-            "domain → event_structure_type (the subdivision) → { dominant_value, "
-            "opposes (object categories), supports (object categories), atoms }. "
-            "Each atom is an abstract tendency: direction (support/oppose/mixed), "
-            "target category, protected interest, accepted cost, and tendency_type. "
+            "domain_profiles is this person's domain value profile: domain → "
+            "{ cognition, values (preferred_side/sacrificed_side with origin "
+            "explicit|inferred), ideas (direction + target CATEGORY), strategies, "
+            "conditions }. Each item carries item_id and atom_ids. "
             "When response_language is Chinese these fields are already translated "
             "to Chinese — read them in Chinese and answer in Chinese. "
             "To answer in three steps. STEP 1 — LOCKED stance: identify the "
-            "question's domain AND event-structure subdivision; read that "
-            "subdivision's tendency; match atoms by target CATEGORY plus direction "
-            "(a company/organization question uses target 'organization', never "
-            "'individual'; a person question uses 'individual'). This determines your "
-            "stance and value ranking — it is locked and you must not change it. "
+            "question's domain; read that domain's values (the preferred/sacrificed "
+            "ranking) and ideas (direction + target CATEGORY — a company/organization "
+            "question uses target 'organization', never 'individual'; a person "
+            "question uses 'individual'). This determines your stance and value "
+            "ranking — it is locked and you must not change it. Inferred values "
+            "(origin=inferred) are weaker than explicit ones; prefer explicit. "
             "STEP 2 — DEPTH: expand the answer with depth and specificity using your "
             "own general knowledge — concrete argumentation, examples, and context — "
-            "but stay WITHIN the locked stance: never contradict the matched atoms' "
+            "but stay WITHIN the locked stance: never contradict the matched items' "
             "direction or value ranking. Do NOT invent this person's own biography, "
             "memories, or specific life events (that is their specific history, not "
             "general knowledge). STEP 3 — CONTENT: write it first-person, in "
@@ -137,13 +155,13 @@ class VerdictMixin:
             "do not invent a name, role, or biography beyond it. "
             "stance must be one of the ENGLISH allowed_stances "
             "(support/oppose/neutral/conditional_support/mixed/insufficient_evidence) "
-            "— even though the atom fields may be in Chinese, map the direction back "
-            "to its English stance value. tendency_ids lists only the atom_ids values "
-            "from the domain_tendency_index entries you actually relied on. "
+            "— even though the item fields may be in Chinese, map the direction back "
+            "to its English stance value. tendency_ids lists only the item_id values "
+            "from the domain_profiles entries you actually relied on. "
             "answer is the person's first-person reply, under 1200 characters. "
             "response_language tells you which language to write in. If "
             "response_language is Chinese, the WHOLE answer MUST be Chinese — never "
-            "paste an English phrase into a Chinese answer. When no tendency atom "
+            "paste an English phrase into a Chinese answer. When no tendency item "
             "applies, set stance to insufficient_evidence and still write a natural, "
             "deep first-person reply without any meta-commentary about evidence or "
             "data availability."
@@ -299,12 +317,49 @@ class VerdictMixin:
         # 语言守门：中文问必须中文答，否则回退平实正文（平实正文已在推导层按语言写好）
         if is_chinese and not re.search(r"[\u4e00-\u9fff]", rendered):
             return plain, {"status": "render_language_mismatch_fallback_plain", "model_calls": 1}
+        # 语义守门：风格 LLM 只改措辞，不得改立场/事实/数字/否定模态。
+        gate_ok, gate_reason = self._render_semantic_gate(plain, rendered)
+        if not gate_ok:
+            return plain, {
+                "status": "semantic_gate_failed",
+                "reason": gate_reason,
+                "model_calls": 1,
+            }
         return rendered, {
             "status": "rendered",
             "model_calls": 1,
             "model_ref": model_ref,
             "snapshot_id": dict(response["snapshot"])["snapshot_id"],
         }
+
+    @staticmethod
+    def _render_semantic_gate(plain: str, rendered: str) -> tuple[bool, str]:
+        """确定性语义守门：只做表达组织，不改立场/事实/数字/否定模态。"""
+        # ① 受保护片段覆盖：数字/日期/引号数量不变。
+        plain_numbers = re.findall(r"\d+(?:[.,]\d+)*", plain)
+        rendered_numbers = re.findall(r"\d+(?:[.,]\d+)*", rendered)
+        if plain_numbers != rendered_numbers:
+            return False, "protected_number_changed"
+        for mark in ('"', "“", "”"):
+            if plain.count(mark) != rendered.count(mark):
+                return False, "protected_quote_changed"
+        # ② 否定/模态计数不变。
+        if _negation_modality_key(plain) != _negation_modality_key(rendered):
+            return False, "negation_modality_changed"
+        # ③ 无新增长片段：删除 plain 的句子后，剩余除标点/连接词外为空。
+        remainder = rendered
+        for sentence in sorted(
+            (item for item in re.split(r"[。！？.!?]+", plain) if item.strip()),
+            key=len,
+            reverse=True,
+        ):
+            remainder = remainder.replace(sentence, "", 1)
+        for connector in sorted(map(str, SAFE_SURFACE_CONNECTORS), key=len, reverse=True):
+            remainder = remainder.replace(connector, "")
+        clean_remainder = re.sub(r"[\s\n\r\t.,:;!?—\-()，。！？、]+", "", remainder)
+        if clean_remainder:
+            return False, "new_fragment_detected"
+        return True, ""
 
     def _gate_unified_response(
         self,
@@ -332,6 +387,20 @@ class VerdictMixin:
             str(item.get("orientation_id", ""))
             for item in artifact.get("value_orientation_index", [])
         }
+        # unified prompt 让 LLM 从 domain_profiles 的 item_id/atom_ids 里选 tendency_ids；
+        # 门禁必须接受同一 ID 空间（val-*/idea-*/strategy-*/cond-*/cog-*/statement-v4-*/inferred-v4-*），
+        # 否则 LLM 合法引用领域画像原子时必然被拒，unified 路径恒失败。
+        for profile in dict(artifact.get("domain_profiles", {})).values():
+            if not isinstance(profile, Mapping):
+                continue
+            for field in ("values", "ideas", "strategies", "conditions", "cognition"):
+                for item in profile.get(field, []):
+                    if not isinstance(item, Mapping):
+                        continue
+                    if item.get("item_id"):
+                        valid_ids.add(str(item["item_id"]))
+                    for atom_id in item.get("atom_ids", []) or []:
+                        valid_ids.add(str(atom_id))
         valid_ids.discard("")
         tendency_ids = {str(value) for value in unified.get("tendency_ids", [])}
         if not tendency_ids <= valid_ids:
@@ -383,15 +452,16 @@ class VerdictMixin:
             return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value).casefold())
 
         reasons: list[str] = []
-        for domain_cells in dict(artifact.get("domain_tendency_index", {})).values():
-            if not isinstance(domain_cells, Mapping):
+        for profile in dict(artifact.get("domain_profiles", {})).values():
+            if not isinstance(profile, Mapping):
                 continue
-            for cell in domain_cells.values():
-                if not isinstance(cell, Mapping):
-                    continue
-                for atom in cell.get("atoms", []):
-                    if isinstance(atom, Mapping) and atom.get("reason"):
-                        reasons.append(str(atom["reason"]))
+            for field in ("values", "ideas", "strategies", "conditions", "cognition"):
+                for item in profile.get(field, []):
+                    if not isinstance(item, Mapping):
+                        continue
+                    for span in item.get("evidence_spans", []):
+                        if span:
+                            reasons.append(str(span))
         for item in dict(artifact.get("reviewed_public_model", {})).get(
             "preference_atoms", []
         ):
@@ -400,6 +470,11 @@ class VerdictMixin:
             for reason in item.get("reasons", []) or []:
                 if reason:
                     reasons.append(str(reason))
+        for item in artifact.get("statement_atoms", []) or []:
+            if not isinstance(item, Mapping):
+                continue
+            if item.get("statement"):
+                reasons.append(str(item["statement"]))
         answer_norm = _norm(answer)
         for reason in reasons:
             reason_norm = _norm(reason)

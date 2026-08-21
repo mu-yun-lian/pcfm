@@ -19,6 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
   factual: '人物事实判断',
   identity: '身份介绍',
   direct_historical: '历史直接依据',
+  domain_profile_answer: '领域画像综合（公开倾向归纳）',
   clarification_needed: '需要澄清',
   content_contract_gate_failed_bounded_anchor: '内容合同检查未通过，已返回中性回答',
   generated_from_frozen_v5_content_plan: '已按冻结内容计划生成回答',
@@ -39,6 +40,8 @@ const HUMAN_STATUS_LABELS: Record<string, string> = {
   applied_exploratory: '探索性内容模型已更新',
   applied_structural_only: '已生成表层风格，并通过结构守门',
   rendering_enabled_exploratory: '人物风格渲染已启用（探索性）',
+  domain_profile_narrated: '领域画像已忠实转述',
+  domain_profile_hard_concat: '领域画像硬拼接（转述不可用）',
   style_material_ready_rendering_not_enabled: '风格资料已建立，渲染未启用',
   person_style_applied: '人物风格已应用',
   neutral_expression: '中性表达',
@@ -78,11 +81,11 @@ export function humanStatus(value?: string | null): string {
 
 export function shortTime(value?: string | null): string {
   if (!value) return ''
-  try {
-    return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === new Date().toDateString()) return time
+  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + time
 }
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -95,4 +98,22 @@ const HTML_ESCAPES: Record<string, string> = {
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>'"]/g, (ch) => HTML_ESCAPES[ch])
+}
+
+// 与后端 response_prediction.py 的 TRAINABLE_AUTHENTICITY 对齐。
+export const TRAINABLE_AUTHENTICITY = new Set([
+  'verbatim_transcript',
+  'verified_quote',
+  'verified_translation',
+])
+
+// 判定一份来源在「确认后」能否进入人物模型版本（证据门禁的前端镜像）。
+// 后端还要求说话人匹配与（翻译时）translation_of，此处只镜像最关键的三项门槛。
+// 参数用 Record<string, unknown> 以同时兼容表单值和带索引签名的 Source 类型。
+export function sourceIsTrainable(source: Record<string, unknown> | null | undefined): boolean {
+  if (!source) return false
+  const auth = String(source.content_authenticity ?? '')
+  const locator = String(source.source_locator ?? '').trim()
+  const provenance = String(source.source_url ?? '').trim() || String(source.filename ?? '').trim()
+  return TRAINABLE_AUTHENTICITY.has(auth) && !!locator && !!provenance
 }

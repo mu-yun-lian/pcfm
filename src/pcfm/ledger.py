@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""签名账本与验证机构。
+
+边界：HMAC-SHA256 是对称 MAC（message authentication code），仅适用于
+「单一受信第三方持钥」的原型；它不提供不可否认性，也不能防持钥方篡改。
+生产环境必须替换为分权的非对称签名、透明日志或外部时间戳服务。
+"""
+
 import hashlib
 import hmac
 import json

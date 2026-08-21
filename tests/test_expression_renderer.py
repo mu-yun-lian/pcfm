@@ -89,7 +89,11 @@ class ExpressionRendererTests(unittest.TestCase):
         )
         result = self.renderer.render(contract)
         for candidate in result["candidates"]:
-            self.assertTrue(all(value == "passed" for value in candidate["checks"].values()))
+            for key, value in candidate["checks"].items():
+                if key.endswith("_immutable"):
+                    self.assertEqual("not_checked", value, key)
+                else:
+                    self.assertEqual("passed", value, key)
             self.assertIn("should not", candidate["text"])
             self.assertIn("may", candidate["text"])
         self.assertEqual(result["structured_content"]["confidence"], 0.37)

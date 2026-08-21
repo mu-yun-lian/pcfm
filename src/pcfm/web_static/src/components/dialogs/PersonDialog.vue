@@ -100,6 +100,7 @@ function onAvatarDrop(event: DragEvent) {
         <button type="button" class="close-button" @click="close">关闭</button>
       </div>
       <div
+        v-if="!isCreate"
         ref="avatarDropZone"
         class="avatar-row"
         @dragover="onAvatarDragOver"
@@ -114,6 +115,7 @@ function onAvatarDrop(event: DragEvent) {
           <input ref="avatarFileInput" type="file" accept="image/png,image/jpeg,image/webp" hidden @change="onAvatarFile" />
         </div>
       </div>
+      <p v-if="isCreate" class="plain-notice" style="margin:0 0 14px">头像可在创建完成后通过「编辑人物」上传。</p>
       <label>人物名称（必填）<input v-model="name" required placeholder="例如：Steve Jobs" /></label>
       <details class="advanced-fields">
         <summary>更多选项（可后改）</summary>

@@ -36,3 +36,5 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+talk_histroy/
+*_output.txt

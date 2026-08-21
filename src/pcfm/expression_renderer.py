@@ -90,8 +90,39 @@ UNSAFE_RULE_FRAGMENTS = (
     "role-play",
     "roleplay",
 )
-NEGATION_TOKENS = ("not", "no", "never", "without", "n't")
-MODAL_TOKENS = ("may", "might", "could", "possibly", "uncertain", "probably")
+NEGATION_TOKENS = (
+    "not",
+    "no",
+    "never",
+    "without",
+    "cannot",
+    "不",
+    "没有",
+    "未",
+    "无",
+    "别",
+    "莫",
+    "非",
+    "否",
+)
+MODAL_TOKENS = (
+    "may",
+    "might",
+    "could",
+    "possibly",
+    "uncertain",
+    "probably",
+    "可能",
+    "也许",
+    "或许",
+    "大概",
+    "应该",
+    "似乎",
+    "未必",
+)
+# 英文缩写否定（don't / can't / won't / shouldn't / couldn't / doesn't …）：
+# (?<!\w)n't 在 don't 里不匹配（n 前面是 o），改用 \b\w+n['']t\b 显式匹配。
+CONTRACTION_NEGATION_PATTERN = re.compile(r"\b\w+n['']t\b")
 SAFE_SURFACE_CONNECTORS = (
     "Actually, ",
     "Look, ",
@@ -492,7 +523,16 @@ class ExpressionRenderer:
         )
         checks["protected_quotes"] = _exact_once(candidate_text, list(contract.payload["protected_quotes"]), at_least=True)
         source_text = "\n".join(all_segments)
-        checks["negation_modality"] = "passed" if _token_counts(source_text, NEGATION_TOKENS + MODAL_TOKENS) == _token_counts(candidate_text, NEGATION_TOKENS + MODAL_TOKENS) else "failed"
+        checks["negation_modality"] = (
+            "passed"
+            if (
+                _token_counts(source_text, NEGATION_TOKENS + MODAL_TOKENS)
+                == _token_counts(candidate_text, NEGATION_TOKENS + MODAL_TOKENS)
+                and len(CONTRACTION_NEGATION_PATTERN.findall(source_text.casefold()))
+                == len(CONTRACTION_NEGATION_PATTERN.findall(candidate_text.casefold()))
+            )
+            else "failed"
+        )
         remainder = candidate_text
         for text in sorted(all_segments, key=len, reverse=True):
             remainder = remainder.replace(text, "", 1)
@@ -507,16 +547,18 @@ class ExpressionRenderer:
         source_quote_count = sum(source_text.count(mark) for mark in ('"', "“", "”"))
         checks["quote_addition"] = "passed" if quote_count == source_quote_count else "failed"
         checks["causal_direction"] = "passed" if checks["reason_coverage"] == "passed" else "failed"
-        checks["speech_act_immutable"] = "passed"
-        checks["stance_immutable"] = "passed"
-        checks["refusal_status_immutable"] = "passed"
-        checks["confidence_immutable"] = "passed"
-        checks["structured_fields_immutable"] = "passed"
+        # 不可变性：check_candidate 只拿「当前契约 + 候选」，原理上无法判断立场/事实是否被改，
+        # 由「上游冻结 + 渲染只做前缀/连接词插入」结构性保证；运行时如实标 not_checked，不伪造通过。
+        checks["speech_act_immutable"] = "not_checked"
+        checks["stance_immutable"] = "not_checked"
+        checks["refusal_status_immutable"] = "not_checked"
+        checks["confidence_immutable"] = "not_checked"
+        checks["structured_fields_immutable"] = "not_checked"
         checks["bidirectional_entailment_proxy"] = "passed" if all(checks[key] == "passed" for key in ("claim_coverage", "reason_coverage", "memory_coverage", "uncertainty_preservation", "new_claim_detection")) else "failed"
         reasons = [
             ("new_claim_or_unapproved_text" if key == "new_claim_detection" else key)
             for key, value in checks.items()
-            if value != "passed"
+            if value == "failed"
         ]
         return {"status": "passed" if not reasons else "rejected", "checks": checks, "reasons": reasons}
 
@@ -763,7 +805,15 @@ def _exact_once(text: str, values: Sequence[str], *, at_least: bool = False) -> 
 
 def _token_counts(text: str, tokens: Sequence[str]) -> tuple[tuple[str, int], ...]:
     lowered = text.casefold()
-    return tuple((token, len(re.findall(rf"(?<!\w){re.escape(token)}(?!\w)", lowered))) for token in tokens)
+
+    def _count(token: str) -> int:
+        # 中文否定/模态词连续书写，\w 边界匹配不到（"不支持"里的"不"），改子串计数；
+        # 英文词保留 \w 边界（避免 "no" 误中 "now"）。
+        if re.search(r"[\u4e00-\u9fff]", token):
+            return lowered.count(token)
+        return len(re.findall(rf"(?<!\w){re.escape(token)}(?!\w)", lowered))
+
+    return tuple((token, _count(token)) for token in tokens)
 
 
 def _classify_material(text: str, relative: str) -> tuple[str, str, str]:

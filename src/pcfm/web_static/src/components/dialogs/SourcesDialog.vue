@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useDialog } from '../../composables/useDialog'
 import { useAppStore } from '../../stores/app'
-import { humanStatus } from '../../lib/labels'
+import { humanStatus, sourceIsTrainable, TRAINABLE_AUTHENTICITY } from '../../lib/labels'
 import { fileToBase64 } from '../../lib/file'
 import type { Source, CollectionState } from '../../types'
 
 const { el, close, onClose } = useDialog('sources')
 const store = useAppStore()
+onMounted(() => {
+  store.loadFullConversation().catch((error) => store.showToast((error as Error).message, true))
+})
 
 const textForm = reactive({
   title: '',
@@ -58,6 +61,24 @@ const counts = computed(() => store.conversation?.source_counts || { confirmed: 
 const sourceCountSummary = computed(() => counts.value.confirmed + ' 已确认 · ' + counts.value.pending + ' 待审核 · ' + counts.value.final_holdout + ' 最终留出')
 const optimizationCandidates = computed(() => [...(store.conversation?.optimization_candidates || [])].reverse())
 
+const materialProcessingConfigured = computed(() => !!store.materialProcessingModelRef)
+
+const textTrainable = computed(() => sourceIsTrainable({
+  content_authenticity: textForm.content_authenticity,
+  source_locator: textForm.source_locator,
+  source_url: textForm.source_url,
+}))
+const fileTrainable = computed(() => sourceIsTrainable({
+  content_authenticity: fileForm.content_authenticity,
+  source_locator: fileForm.source_locator,
+  filename: fileForm.file?.name || '',
+}))
+const urlTrainable = computed(() => sourceIsTrainable({
+  content_authenticity: urlForm.content_authenticity,
+  source_locator: urlForm.source_locator,
+  source_url: urlForm.url,
+}))
+
 const networkNoteText = computed(() => {
   const collection = (store.person?.collection || store.conversation?.profile?.collection || {}) as CollectionState
   if (collection.mode === 'system_search') {
@@ -70,8 +91,27 @@ function speakerScopeText(source: Source): string {
   return source.speaker_scope === 'mixed_speakers' ? '多人混合，需逐段确认' : '整份材料主要说话人'
 }
 
-function hasVerbatim(source: Source): boolean {
-  return !!(source.response_events || []).some((item) => item.label_status === 'confirmed_response_weak_semantic_labels')
+// 材料三路分流（§7）：训练标签 / 人物背景 / 参考。逐项列出「缺哪几项、怎么补」。
+function sourceRouteNote(source: Source): string {
+  if (source.review_status === 'pending') {
+    return '待审核：确认前不会进入任何路径。'
+  }
+  if (source.dataset_role === 'model_source') {
+    return '训练标签路径：本人公开、可逐字核验的回应，将进入事件原子与领域画像。'
+  }
+  const auth = String(source.content_authenticity || '')
+  const locator = String(source.source_locator || '').trim()
+  const provenance = (String(source.source_url || '') || String(source.filename || '')).trim()
+  const missing: string[] = []
+  if (!TRAINABLE_AUTHENTICITY.has(auth)) {
+    missing.push('逐字核验（选「已核验逐字稿 / 本人原文 / 准确翻译」）')
+  }
+  if (!locator) missing.push('原始材料位置')
+  if (!provenance) missing.push('来源网址或文件名')
+  const base = source.dataset_role === 'reference_only'
+    ? '参考路径（正确位置）：作为背景知识与检索对照，不会进入人物立场。'
+    : humanStatus(source.dataset_role) + '路径。'
+  return missing.length ? base + ' 缺：' + missing.join('、') + '。' : base
 }
 
 async function submitText() {
@@ -222,7 +262,7 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
           <label>说话人<input v-model="textForm.speaker" required /></label>
           <label>原始内容<textarea v-model="textForm.text" rows="6" required placeholder="可粘贴完整文章、访谈、问答或其他原始材料"></textarea></label>
           <details class="advanced-fields">
-            <summary>证据核验与用途（可选）</summary>
+            <summary>证据核验与用途（形成人物版本必需）</summary>
             <fieldset class="evidence-contract-fields">
               <legend>证据核验信息</legend>
               <label>内容真实性
@@ -257,6 +297,9 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
               </select>
             </label>
           </details>
+          <p v-if="!textTrainable" class="plain-notice" style="margin-top:8px">
+            当前核验设置下这份材料只能作为「仅参考」，无法形成人物版本。要进入训练，请选择「已核验逐字稿 / 准确翻译」并填写「原始材料位置」与「来源网址」。
+          </p>
           <button class="button primary" type="submit" :disabled="textBusy">{{ textBusy ? '保存中…' : '保存为待审核资料' }}</button>
         </form>
 
@@ -267,7 +310,7 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
             <label>文件<input type="file" accept=".txt,.md,.markdown,.html,.htm,.srt,.vtt,.json,.csv,.pdf" required @change="onFileSelected" /></label>
             <label>说话人<input v-model="fileForm.speaker" required /></label>
             <details class="advanced-fields">
-              <summary>证据核验与用途（可选）</summary>
+              <summary>证据核验与用途（形成人物版本必需）</summary>
               <label>说话人范围
                 <select v-model="fileForm.speaker_scope">
                   <option value="single_speaker_entire_document">整份材料主要由该人物表达</option>
@@ -296,6 +339,9 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
                 </select>
               </label>
             </details>
+            <p v-if="!fileTrainable" class="plain-notice" style="margin-top:8px">
+              当前核验设置下这份文件只能作为「仅参考」。要进入训练，请选择「已核验逐字稿或本人原文 / 准确翻译」并填写「原始材料位置」。
+            </p>
             <button class="button secondary" type="submit" :disabled="fileBusy">{{ fileBusy ? '提取中…' : '上传并提取' }}</button>
           </form>
 
@@ -304,7 +350,7 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
             <label>网址<input v-model="urlForm.url" type="url" required placeholder="https://..." /></label>
             <label>说话人<input v-model="urlForm.speaker" required /></label>
             <details class="advanced-fields">
-              <summary>证据核验与用途（可选）</summary>
+              <summary>证据核验与用途（形成人物版本必需）</summary>
               <label>说话人范围
                 <select v-model="urlForm.speaker_scope">
                   <option value="single_speaker_entire_document">整份材料主要由该人物表达</option>
@@ -333,6 +379,9 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
                 </select>
               </label>
             </details>
+            <p v-if="!urlTrainable" class="plain-notice" style="margin-top:8px">
+              当前核验设置下这份网页快照只能作为「仅参考」。要进入训练，请选择「已核验逐字稿或本人原文 / 准确翻译」并填写「原始材料位置」。
+            </p>
             <button class="button secondary" type="submit" :disabled="urlBusy">{{ urlBusy ? '抓取中…' : '抓取网页快照' }}</button>
           </form>
 
@@ -345,6 +394,10 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
         <span>{{ sourceCountSummary }}</span>
         <button class="mini-button confirm" type="button" :disabled="processBusy" @click="processAll">{{ processBusy ? '处理中…' : '一键处理全部材料' }}</button>
       </div>
+      <p v-if="!materialProcessingConfigured" class="plain-notice" style="margin-top:8px">
+        尚未配置资料处理模型：资料可先确认，但「自动提取候选」需要先在「选择对话模型」中配置并验证资料处理模型。
+        <button type="button" class="text-button" @click="store.openDialog('model')">去配置</button>
+      </p>
       <div class="processing-progress" v-if="store.processing.visible">
         <span>{{ store.processing.text }}</span>
         <div class="progress-track"><div class="progress-fill" :style="{ width: store.processing.percent + '%' }"></div></div>
@@ -358,8 +411,7 @@ async function reviewOptimizationStyle(candidateId: string, decision: string) {
           </header>
           <p>{{ source.text_preview }}</p>
           <p>说话人：{{ source.speaker || '未记录' }} · 范围：{{ speakerScopeText(source) }} · 格式：{{ source.format }} · 数据用途：{{ humanStatus(source.dataset_role) }} · 事件包：{{ source.response_events?.length || 0 }}</p>
-          <p>{{ hasVerbatim(source) ? '包含可追溯的本人公开回应；系统已按事件、条件倾向和公开使用的知识主张整理。' : '尚无可进入人物模型的公开回应；材料仍作为待核验或参考资料保留。' }}</p>
-          <p v-if="source.llm_response_event_candidates?.length">资料处理模型提出 {{ source.llm_response_event_candidates.length }} 条待审核响应事件候选；尚未进入训练。</p>
+          <p class="route-note">{{ sourceRouteNote(source) }}</p>          <p v-if="source.llm_response_event_candidates?.length">资料处理模型提出 {{ source.llm_response_event_candidates.length }} 条待审核响应事件候选；尚未进入训练。</p>
 
           <div v-for="candidate in source.llm_response_event_candidates || []" :key="candidate.candidate_id" class="candidate-box">
             <p><strong>{{ candidate.trigger || '公开回应候选' }}</strong> · {{ candidate.source_locator || '未标注位置' }}</p>

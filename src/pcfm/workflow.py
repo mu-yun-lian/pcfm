@@ -549,12 +549,8 @@ def _validate_person_model(
         personalization_passed=bool(
             diagnostics["personalization_passed"]
         ),
-        mechanism_probe_nll_uplift=float(
-            diagnostics["mechanism_probe_nll_uplift"]
-        ),
-        mechanism_adequacy_passed=bool(
-            diagnostics["mechanism_adequacy_passed"]
-        ),
+        mechanism_probe_nll_uplift=diagnostics["mechanism_probe_nll_uplift"],
+        mechanism_adequacy_passed=diagnostics["mechanism_adequacy_passed"],
         temporal_stability_status=temporal.status,
         temporal_drift_score=temporal.maximum_score_z,
         temporal_critical_score_z=temporal.critical_score_z,

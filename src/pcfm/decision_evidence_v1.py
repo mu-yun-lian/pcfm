@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""Decision-Context-Rationale 证据合同 v1。
+
+边界：签名采用 HMAC-SHA256（对称 MAC），仅适用于「单一受信第三方持钥」的原型；
+不提供不可否认性、不能防持钥方篡改。验签密钥必须带外获得，不得随包提交；
+`created_at` 由调用方给定、仅作自证，不能证明外部时间或材料完备性。
+生产须换非对称签名 / 透明日志 / 外部时间戳服务。
+"""
+
 import hashlib
 import json
 from math import isfinite
@@ -934,6 +942,14 @@ def validate_decision_evidence_bundle(
     expected_digest = _digest_json(bundle._content_dict())
     if expected_digest != bundle.artifact_digest:
         reasons.append("artifact_digest_mismatch")
+    # created_at 自证边界：不得在未来（允许少量时钟漂移）。
+    try:
+        created_at_time = _parse_timestamp(bundle.created_at, "created_at")
+    except ValueError as error:
+        reasons.append(str(error))
+    else:
+        if created_at_time > datetime.now(timezone.utc) + timedelta(minutes=5):
+            reasons.append("created_at_in_future")
     content_reasons, content_fingerprint = _validate_bundle_content(
         sources=bundle.sources,
         records=bundle.records,

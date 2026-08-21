@@ -57,11 +57,23 @@ async function openArchive() {
   store.openDialog('archive')
 }
 
-async function renameSession(s: Session) {
-  const current = s.title || ''
-  const title = window.prompt('新标题：', current)
-  if (title === null) return
-  await store.renameSession(s.session_id, title)
+const renamingId = ref<string | null>(null)
+const renameDraft = ref('')
+
+function startRename(s: Session) {
+  renamingId.value = s.session_id
+  renameDraft.value = s.title || ''
+}
+
+function cancelRename() {
+  renamingId.value = null
+  renameDraft.value = ''
+}
+
+async function commitRename(s: Session) {
+  const title = renameDraft.value.trim()
+  if (title) await store.renameSession(s.session_id, title)
+  cancelRename()
 }
 
 async function deleteSession(s: Session) {
@@ -219,14 +231,29 @@ async function onCardDrop(event: DragEvent, personId: string) {
       <input v-model="sessionSearch" class="session-search" type="search" placeholder="搜索会话" />
       <div id="sidebar-sessions-list">
         <div v-for="s in visibleSessions" :key="s.session_id" class="sidebar-session" :class="{ active: s.active }">
-          <button class="ss-main" @click="store.switchSession(s.session_id)">
-            <span class="ss-title">{{ s.title || '新对话' }}</span>
-            <span class="ss-meta">{{ s.message_count }} 条 · {{ shortTime(s.updated_at) }}</span>
-          </button>
-          <span class="ss-actions">
-            <button class="ss-btn" title="重命名" @click.stop="renameSession(s)">✎</button>
-            <button class="ss-btn" title="删除" @click.stop="deleteSession(s)">✕</button>
-          </span>
+          <template v-if="renamingId === s.session_id">
+            <input
+              v-model="renameDraft"
+              class="session-rename-input"
+              @keydown.enter.prevent="commitRename(s)"
+              @keydown.esc.prevent="cancelRename"
+              @blur="commitRename(s)"
+            />
+            <span class="ss-actions">
+              <button class="ss-btn" title="确认" @mousedown.prevent @click.stop="commitRename(s)">✓</button>
+              <button class="ss-btn" title="取消" @mousedown.prevent @click.stop="cancelRename">✕</button>
+            </span>
+          </template>
+          <template v-else>
+            <button class="ss-main" @click="store.switchSession(s.session_id)">
+              <span class="ss-title">{{ s.title || '新对话' }}</span>
+              <span class="ss-meta">{{ s.message_count }} 条 · {{ shortTime(s.updated_at) }}</span>
+            </button>
+            <span class="ss-actions">
+              <button class="ss-btn" title="重命名" @click.stop="startRename(s)">✎</button>
+              <button class="ss-btn" title="删除" @click.stop="deleteSession(s)">✕</button>
+            </span>
+          </template>
         </div>
         <p class="people-empty" v-if="!visibleSessions.length">{{ sessionSearch ? '无匹配会话' : '暂无会话' }}</p>
       </div>

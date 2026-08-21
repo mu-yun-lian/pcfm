@@ -278,7 +278,14 @@ class AssistantEngine:
             return "已恢复「%s」。" % person["name"]
         if name == "permanent_delete_person":
             pid = self._resolve_person(args.get("person_id"), by_name)
-            self.service.permanently_delete_archived_person(pid)
+            archived_person = next(
+                (p for p in archived if str(p.get("person_id")) == pid), None
+            )
+            if archived_person is None:
+                return "该归档人物不存在。"
+            self.service.permanently_delete_archived_person(
+                pid, expected_name=str(archived_person.get("name", ""))
+            )
             return "已永久删除。"
         if name == "process_materials":
             return self._process_materials(self._resolve_person(args.get("person_id"), by_name))

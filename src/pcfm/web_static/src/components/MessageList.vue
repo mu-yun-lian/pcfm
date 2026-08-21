@@ -28,9 +28,10 @@ function toggleEvidence(id: string) {
 
 function evidenceMeta(m: Message): string {
   const first = statusLabel(m.answer_status || m.status)
+  const conf = Number(m.confidence)
   const second =
     m.person_prediction_status && m.person_prediction_status !== 'not_available'
-      ? '证据支持 ' + Number(m.confidence).toFixed(2) + '（非准确率）'
+      ? '证据支持 ' + (Number.isFinite(conf) ? conf.toFixed(2) : '—') + '（非准确率）'
       : '非人物预测'
   return first + ' · ' + second
 }
@@ -143,6 +144,9 @@ watch(
           />
           <div class="assistant-body">
             <div class="answer">{{ m.text }}</div>
+            <div v-if="m.status === 'needs_model'" class="needs-model-nudge">
+              <button type="button" class="mini-button confirm" @click="store.openDialog('model')">配置对话模型</button>
+            </div>
             <button v-if="m.status === 'generating' && store.activeJobId" class="mini-button" type="button" @click="store.cancelActiveJob()">停止生成</button>
 
             <div v-if="m.uncertainties && m.uncertainties.length" class="plain-notice">

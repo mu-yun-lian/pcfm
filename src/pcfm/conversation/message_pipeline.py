@@ -396,8 +396,8 @@ class MessagePipelineMixin:
                     )
                     rendered = rendered or (
                         "当前没有已验证并选用的对话模型，因此无法生成通用知识回答。"
-                        "请在输入框的模型菜单中选择‘验证并使用’；系统不会把通用模型内容"
-                        "冒充为人物预测。"
+                        "系统不会把通用模型内容冒充为人物预测。请点击输入框旁的「＋」"
+                        "→「模型」→「＋添加供应商」配置并验证一个对话模型后再试。"
                     )
                     generated_neutral = rendered
                     style_status = "not_run_no_person_prediction"
@@ -474,6 +474,44 @@ class MessagePipelineMixin:
                     render_calls = int(unified.get("model_calls", 0)) + int(
                         render_trace.get("model_calls", 0)
                     )
+                    validation_calls = 0
+                elif predicted["answer_status"] == "domain_profile_answer":
+                    # 领域画像回答（§5.2）：优先 LLM 忠实转述，无模型/门禁失败回退硬拼接。
+                    hard_concat = (
+                        str(basis.get("prediction_statement", "")).strip()
+                        or "\n".join(str(item["text"]) for item in contract["claims"])
+                    )
+                    domains = [str(value) for value in basis.get("domains", [])]
+                    narration = self._narrate_domain_profile(
+                        person_id=person_id,
+                        artifact=artifact,
+                        domains=domains,
+                        is_chinese=bool(re.search(r"[\u4e00-\u9fff]", clean)),
+                        model_ref=selected_model_ref,
+                    )
+                    if narration.get("status") == "ok" and narration.get("narration"):
+                        rendered = str(narration["narration"])
+                        style_status = "domain_profile_narrated"
+                        style_gate = {
+                            "status": "domain_profile_narrated",
+                            "referenced_item_ids": narration.get(
+                                "referenced_item_ids", []
+                            ),
+                        }
+                        base["knowledge_source"] = "domain_profile_narration"
+                        render_calls = int(narration.get("model_calls", 0))
+                    else:
+                        rendered = hard_concat
+                        style_status = "domain_profile_hard_concat"
+                        style_gate = {
+                            "status": "domain_profile_hard_concat",
+                            "reason": str(
+                                narration.get("reason")
+                                or narration.get("status")
+                                or "fallback"
+                            ),
+                        }
+                        render_calls = 0
                     validation_calls = 0
                 else:
                     # Direct and similar-event answers already contain frozen,

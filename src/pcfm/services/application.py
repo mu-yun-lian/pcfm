@@ -92,6 +92,7 @@ class PcfmService(
             "versions": self._sync_versions_to_sqlite,
             "sessions": self._sync_sessions_to_sqlite,
             "state": self._sync_versions_to_sqlite,
+            "sources": self._sync_sources_to_sqlite,
         }
         self.job_store = JobStore(self.db)
         self.job_runner = JobRunner(self.job_store, max_workers=2)
@@ -535,3 +536,40 @@ class PcfmService(
             _write_json(directory / "predictions.json", [])
             _write_json(directory / "versions.json", [])
         self.cognitive.seed_case(identifier, case)
+
+    def get_person_light(self, person_id: str) -> dict[str, object]:
+        """轻量人物详情：对话摘要只取 light, 避免大数据人物加载超时。"""
+        with self._person_lock(person_id):
+            person = self._require_person(person_id)
+            history = self._history(person_id)
+            training, applicability, validation = self._partition_history(history)
+            versions = self._versions(person_id)
+            predictions = self._predictions(person_id)
+            public_person = {key: value for key, value in person.items() if key != "local_verifier_secret"}
+            public_person.update(
+                {
+                    "sample_count": len(history),
+                    "partition_counts": {
+                        "training": len(training),
+                        "applicability": len(applicability),
+                        "validation": len(validation),
+                    },
+                    "data_sufficiency": self._data_sufficiency(len(training), len(applicability), len(validation)),
+                    "predictions": predictions,
+                    "prediction_metrics": self._prediction_metrics(person_id),
+                    "versions": [self._version_public(item) for item in versions],
+                    "latest_model": self._version_public(versions[-1]) if versions else None,
+                    "history_preview": history[-20:],
+                    "advanced_evidence_count": len(list((self._person_dir(person_id) / "advanced_evidence").glob("*.summary.json"))) if (self._person_dir(person_id) / "advanced_evidence").exists() else 0,
+                    "behavior_baseline": {
+                        "display_name": "行为基线模型（Logistic）",
+                        "status": self._version_public(versions[-1])["validation_status"] if versions else "not_trained",
+                        "notice": "它只拟合结构化历史选择，不等同于人物认知模型。",
+                    },
+                    "cognitive": self.cognitive.summary(person_id),
+                    "conversation": self._conversation_call(
+                        self.conversation.summary, person_id, light=True
+                    ),
+                }
+            )
+            return public_person

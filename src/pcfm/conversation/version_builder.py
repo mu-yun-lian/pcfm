@@ -66,6 +66,18 @@ class VersionBuilderMixin:
             person_id, f"simulation_models/simulation-model-v{int(version_number)}.json"
         )
 
+    def _version_record_path(
+        self, person_id: str, version_number: int, key: str
+    ) -> Path | None:
+        """从版本记录读取工件路径（style-only 版本复用父版本工件，路径指向父版本）。"""
+        versions = self._list(person_id, "conversation_versions.json")
+        for version in versions:
+            if int(version["version"]) == int(version_number):
+                rel = str(version.get(key, "")).strip()
+                if rel:
+                    return (self._person_dir(person_id) / rel).resolve()
+        return None
+
     def _style_artifact_path(self, person_id: str, version_number: int) -> Path:
         return self._path(
             person_id, f"style_profiles/style-profile-v{int(version_number)}.json"
@@ -226,23 +238,13 @@ class VersionBuilderMixin:
     def _response_model(
         self, person_id: str, version_number: int
     ) -> dict[str, object]:
-        path = self._response_model_path(person_id, version_number)
+        path = self._version_record_path(
+            person_id, version_number, "response_model_path"
+        )
+        if path is None:
+            path = self._response_model_path(person_id, version_number)
         if not path.exists():
-            artifact = self._fit_response_model(
-                person_id,
-                version_number=version_number,
-                source_ids=self._version_source_ids(person_id, version_number),
-            )
-            versions = self._list(person_id, "conversation_versions.json")
-            for version in versions:
-                if int(version["version"]) == int(version_number):
-                    version["response_model_path"] = str(
-                        path.relative_to(self._person_dir(person_id)).as_posix()
-                    )
-                    version["response_model_hash"] = artifact["artifact_hash"]
-                    version["content_model_kind"] = "pcfm_unified_response_predictor_v2"
-            _write_json(self._path(person_id, "conversation_versions.json"), versions)
-            return artifact
+            raise ConversationError("该版本响应模型工件缺失，无法加载；请使用显式重建入口重新计算。")
         raw = _read_json(path, {})
         if not isinstance(raw, dict):
             raise ConversationError("人物响应模型文件损坏。")
@@ -253,25 +255,9 @@ class VersionBuilderMixin:
             or "overall_tendencies" not in raw
             or "event_relations" not in raw
         ):
-            migrated_from = str(raw.get("schema_version", "unknown"))
-            artifact = self._fit_response_model(
-                person_id,
-                version_number=version_number,
-                source_ids=self._version_source_ids(person_id, version_number),
+            raise ConversationError(
+                "该版本响应模型工件 schema 与当前内核不匹配；不静默重建，请使用显式重建入口重新计算。"
             )
-            versions = self._list(person_id, "conversation_versions.json")
-            for version in versions:
-                if int(version["version"]) == int(version_number):
-                    version["content_model_kind"] = "pcfm_unified_response_predictor_v2"
-                    version["response_model_hash"] = artifact["artifact_hash"]
-                    version["artifact_migration"] = {
-                        "from_schema": migrated_from,
-                        "to_schema": MODEL_SCHEMA_V2,
-                        "method": "refit_from_reviewed_version_sources",
-                        "migrated_at": _utc_now(),
-                    }
-            _write_json(self._path(person_id, "conversation_versions.json"), versions)
-            return artifact
         try:
             self._predictor.verify(raw)
         except ResponsePredictionError as error:
@@ -352,8 +338,19 @@ class VersionBuilderMixin:
         cached = self._report_cache.get(cache_key)
         if cached is not None:
             return copy.deepcopy(cached)
-        path = self._simulation_model_path(person_id, version_number)
-        raw = _read_json(path, {}) if path.exists() else {}
+        path = self._version_record_path(
+            person_id, version_number, "simulation_model_path"
+        )
+        if path is None:
+            path = self._simulation_model_path(person_id, version_number)
+        if not path.exists():
+            raise ConversationError("该版本模型工件缺失，无法加载；请使用显式重建入口重新计算。")
+        versions = self._list(person_id, "conversation_versions.json")
+        record_hash = ""
+        for version in versions:
+            if int(version["version"]) == int(version_number):
+                record_hash = str(version.get("simulation_model_hash", "")).strip()
+        raw = _read_json(path, {})
         needs_refit = (
             not isinstance(raw, dict)
             or raw.get("schema_version") != MODEL_SCHEMA_V5
@@ -366,12 +363,17 @@ class VersionBuilderMixin:
                 raise ConversationError(
                     "Simulation V5 artifact integrity validation failed."
                 ) from error
+            # 记录哈希存在且与工件哈希不一致 → 拒绝，不静默改写（防篡改/损坏）。
+            if record_hash and record_hash != str(raw.get("artifact_hash", "")):
+                raise ConversationError("版本工件哈希与记录不一致，可能被篡改或损坏。")
             profile = self.profile(person_id)
             person = self._person(person_id)
             try:
                 recomputed = self._simulation_predictor.fit(
                     person_id=person_id,
-                    version=version_number,
+                    # style-only 版本复用父版本工件：重算必须用工件的自身 version，
+                    # 否则摘要里的 version 字段会与加载版本号不一致导致误报。
+                    version=int(raw.get("version", version_number)),
                     reviewed_sources=self._reviewed_sources_for_simulation_v4(
                         person_id,
                         self._version_source_ids(person_id, version_number),
@@ -404,15 +406,12 @@ class VersionBuilderMixin:
             )
         else:
             artifact = dict(raw)
-        versions = self._list(person_id, "conversation_versions.json")
+        # 回填/迁移：needs_refit（schema/build 升级）或记录缺失哈希时写入；已存在且一致时不动。
         changed = False
         for version in versions:
-            if int(version["version"]) == int(version_number) and (
-                version.get("content_model_kind")
-                != "pcfm_conversation_conditioned_response_simulation_v5"
-                or version.get("simulation_model_hash")
-                != artifact["artifact_hash"]
-            ):
+            if int(version["version"]) != int(version_number):
+                continue
+            if needs_refit or not version.get("simulation_model_hash"):
                 version["content_model_kind"] = "pcfm_conversation_conditioned_response_simulation_v5"
                 version["simulation_model_path"] = str(
                     path.relative_to(self._person_dir(person_id)).as_posix()

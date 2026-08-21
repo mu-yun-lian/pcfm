@@ -37,7 +37,7 @@ class ModelServiceError(ValueError):
     pass
 
 
-def _first_text_from_openai(payload: object) -> str:
+def _first_text_from_openai(payload: object, *, allow_reasoning_fallback: bool = False) -> str:
     try:
         if not isinstance(payload, dict):
             raise ValueError
@@ -51,9 +51,13 @@ def _first_text_from_openai(payload: object) -> str:
         if not isinstance(message, dict):
             raise ValueError
         content = message.get("content")
-        if not isinstance(content, str):
-            raise ValueError
-        return content
+        if isinstance(content, str) and content.strip():
+            return content
+        if allow_reasoning_fallback:
+            reasoning = message.get("reasoning_content")
+            if isinstance(reasoning, str) and reasoning.strip():
+                return reasoning
+        raise ValueError
     except (KeyError, ValueError, TypeError):
         raise ModelServiceError("模型服务返回数据格式异常，请检查模型服务类型和 Base URL。")
 
@@ -316,6 +320,12 @@ class ModelServiceManager:
                 "structured_output": bool(dict(payload.get("capabilities", {})).get("structured_output", True)),
                 "streaming": bool(dict(payload.get("capabilities", {})).get("streaming", False)),
                 "reasoning": bool(dict(payload.get("capabilities", {})).get("reasoning", False)),
+                # 推理模型（deepseek-v4-flash/pro 等）默认开启思考，会把 token 花在
+                # reasoning_content 上导致 content 空白。默认请求体加 thinking=disabled；
+                # 若某个兼容服务不接受该参数，可在保存配置时设 disable_thinking=false。
+                "disable_thinking": bool(
+                    dict(payload.get("capabilities", {})).get("disable_thinking", True)
+                ),
             },
             # Saving may change the URL, key, protocol or model IDs.  A previous
             # success is therefore no longer evidence that chat completion works.
@@ -658,14 +668,18 @@ class ModelServiceManager:
                 "temperature": float(temperature),
                 "max_tokens": token_limit,
             }
-            # 注意：不要同时传 thinking=disabled 和 response_format=json_object，
-            # 会导致模型返回纯空白 content（实测 deepseek-v4-pro 复现）。
+            # 推理模型默认开启思考：会把 max_tokens 全部花在 reasoning_content 上，
+            # 导致 content 空白（deepseek-v4-flash 实测）。默认加 thinking=disabled
+            # 让模型直接输出 content；实测 2026-08 deepseek-v4-flash 下
+            # thinking=disabled + response_format=json_object 正常输出 JSON。
+            if bool(dict(item["capabilities"]).get("disable_thinking", True)):
+                body["thinking"] = {"type": "disabled"}
             if structured and bool(dict(item["capabilities"]).get("structured_output")):
                 body["response_format"] = {"type": "json_object"}
             text = ""
             for _attempt in range(3):
                 payload = self._json_request(item, "/chat/completions", method="POST", body=body)
-                text = _first_text_from_openai(payload)
+                text = _first_text_from_openai(payload, allow_reasoning_fallback=structured)
                 if text.strip():
                     break
         elif protocol == "ollama":

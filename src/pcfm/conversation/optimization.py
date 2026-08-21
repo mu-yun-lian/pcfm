@@ -21,6 +21,11 @@ from ._shared import (  # noqa: F401
     _write_json,
 )
 
+# 留出门禁诚实性：当前 V5 留出门禁（simulation_v5 evaluate）因缺「完整多轮对话
+# 留出集」恒返回 not_assessed_full_conversation_holdout_required，因此 v5_score 恒为
+# None，不构成真实非回归比较；唯一可比较的是冻结 V2 的 _holdout_score，缺数据返回
+# None（不放行）。优化候选在无留出集时 validation_status 恒为 *_not_assessed，
+# 不出现虚假 non_regression_passed。
 
 
 class OptimizationMixin:
@@ -130,7 +135,7 @@ class OptimizationMixin:
         source_ids: Sequence[str],
         holdouts: Sequence[Mapping[str, object]],
         additional_events: Sequence[Mapping[str, object]] = (),
-    ) -> float:
+    ) -> float | None:
         events = [
             *self._trainable_events(person_id, source_ids),
             *(copy.deepcopy(dict(event)) for event in additional_events),
@@ -144,7 +149,7 @@ class OptimizationMixin:
             and event.get("data_role") == "sealed_final_validation"
         ]
         if not events or not holdout_events:
-            return 0.0
+            return None
         population_events, population_people = self._population_events(person_id)
         artifact = self._predictor.fit(
             person_id=person_id,
@@ -156,7 +161,7 @@ class OptimizationMixin:
         )
         report = self._predictor.evaluate(artifact, holdout_events)
         if report.get("status") == "not_assessed":
-            return 0.0
+            return None
         return round(
             0.25 * float(report["speech_act_accuracy"])
             + 0.25 * float(report["stance_accuracy"])
@@ -325,7 +330,9 @@ class OptimizationMixin:
         after = self._holdout_score(
             person_id, active_ids, holdouts, additional_events=[selected_event]
         )
-        if after + 1e-12 < before:
+        # 留出集不足（before/after 为 None）→ 不判「通过」，如实标 not_assessed。
+        holdout_assessed = before is not None and after is not None
+        if holdout_assessed and after + 1e-12 < before:
             candidate["status"] = "failed_validation"
             candidate["validation_reasons"] = ["holdout_regression"]
             candidate["holdout_before"] = before
@@ -448,7 +455,7 @@ class OptimizationMixin:
             reason=f"optimization candidate {candidate_id}",
             validation_status=(
                 "selected_event_integrity_and_v5_holdout_non_regression_passed_exploratory_accuracy"
-                if after_v5_score is not None
+                if before_v5_score is not None and after_v5_score is not None
                 else "selected_event_integrity_passed_v5_accuracy_not_assessed"
             ),
             parent_version=state.get("active_version"),

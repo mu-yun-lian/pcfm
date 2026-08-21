@@ -53,7 +53,7 @@ class JobStore:
 
     def __init__(self, db) -> None:
         self._db = db
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def create(self, type_: str, person_id: str | None) -> Job:
         job = Job(
@@ -94,7 +94,8 @@ class JobStore:
             return len(rows)
 
     def get(self, job_id: str) -> Job | None:
-        row = self._db.conn.execute("SELECT * FROM job WHERE job_id=?", (job_id,)).fetchone()
+        with self._lock:
+            row = self._db.conn.execute("SELECT * FROM job WHERE job_id=?", (job_id,)).fetchone()
         if row is None:
             return None
         return Job(

@@ -27,7 +27,7 @@ function mockPersonFlow(personId = 'p1') {
     if (path === '/api/conversation/people') return { person: { person_id: personId, name: 'X' } }
     if (path === '/api/people') return { people: [{ person_id: personId, name: 'X' }] }
     if (path === `/api/people/${personId}`) return { person: { person_id: personId, name: 'X' } }
-    if (path === `/api/people/${personId}/conversation`) return { conversation: emptyConversation() }
+    if (path === `/api/people/${personId}/conversation` || path === `/api/people/${personId}/conversation?light=1&full_messages=1`) return { conversation: emptyConversation() }
     if (path === `/api/people/${personId}/conversation/sessions`) return { sessions: [] }
     if (path === `/api/people/${personId}/conversation/search`) return { job_id: 'j1' }
     return {}
@@ -89,5 +89,63 @@ describe('AI 助手不绑定人物对话模型', () => {
     await store.clearDialogueModel()
     expect(apiMock).not.toHaveBeenCalled()
     expect(store.toast?.message).toContain('AI 助手')
+  })
+})
+
+describe('processAllMaterials 提取后重读来源（防陈旧引用）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('提取候选并刷新后，从刷新后的会话确认候选', async () => {
+    const sourceId = 'SRC'
+    const candidateId = 'CAND'
+    const makeSource = (review: string, candidates: unknown[]) => ({
+      source_id: sourceId,
+      title: 'T',
+      review_status: review,
+      content_authenticity: 'verbatim_transcript',
+      source_locator: '第 1 段',
+      source_url: 'https://example.com/x',
+      llm_response_event_candidates: candidates,
+    })
+    const makeConv = (review: string, candidates: unknown[]) => ({
+      messages: [],
+      source_counts: { confirmed: review === 'confirmed' ? 1 : 0 },
+      active_version: null,
+      status: 'insufficient_evidence',
+      status_text: '尚未建立人物模型',
+      sources: [makeSource(review, candidates)],
+    })
+
+    let refreshCount = 0
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/api/people/p1/processing-progress') return { progress: {} }
+      if (path === `/api/people/p1/conversation/sources/${sourceId}/review`) return {}
+      if (path === '/api/people/p1/conversation?full=1') {
+        refreshCount++
+        if (refreshCount === 1) return { conversation: makeConv('confirmed', []) }
+        return { conversation: makeConv('confirmed', [{ candidate_id: candidateId, review_status: 'pending' }]) }
+      }
+      if (path === `/api/people/p1/conversation/sources/${sourceId}/extract-candidates`) return { job_id: 'j-extract' }
+      if (path === `/api/people/p1/conversation/sources/${sourceId}/candidates/${candidateId}/review`) return {}
+      if (path === '/api/people/p1/conversation/sessions') return { sessions: [] }
+      return {}
+    })
+    pollJobMock.mockResolvedValue({ job_id: 'j', status: 'succeeded' } as never)
+
+    const store = useAppStore()
+    store.person = { person_id: 'p1', name: 'X', avatar: '' }
+    store.modelServices.roles.material_processing = 'srv:model'
+    store.conversation = makeConv('pending', []) as never
+
+    await store.processAllMaterials()
+
+    expect(apiMock).toHaveBeenCalledWith(
+      `/api/people/p1/conversation/sources/${sourceId}/candidates/${candidateId}/review`,
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ decision: 'confirmed' }) }),
+    )
+    expect(store.toast?.message).toContain('确认 1 条候选并形成版本')
   })
 })
