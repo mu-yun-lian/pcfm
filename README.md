@@ -1,10 +1,44 @@
 # PCFM 人物对话系统
 
-**证据约束的人物对话模拟 MVP · 会话条件响应版 v0.11.0**
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.11.0-orange)
+![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen)
+
+**证据约束的人物对话模拟 MVP · 会话条件响应版**
 
 PCFM（Person-Conditioned Factual Memory）是一个可证伪的人物对话模拟研究原型：它用**可逐字溯源的本人公开材料**建立人物模型，在对话中优先给出**该人物真实说过的话**，只在证据充分时用人物自身的重复取向做条件性推断，并在证据不足、超出领域或时间不可复核时拒绝输出。它模拟的是人物**可观测的对外表现**，不宣称恢复真实内心，也不把生成内容冒充为人物记忆。
 
 > 当前发布版 v0.11.0 内置 5 个初始人物：**Steve Jobs（乔布斯）、Donald Trump（特朗普）、Warren Buffett（巴菲特）、王阳明、鲁迅**。
+
+## 目录
+
+- [与普通角色扮演的区别](#与普通角色扮演的区别)
+- [核心原则（不可妥协）](#核心原则不可妥协)
+- [快速开始](#快速开始)
+- [界面预览](#界面预览)
+- [对话机制](#对话机制)
+- [主流程](#主流程)
+- [命令行](#命令行)
+- [测试与验证](#测试与验证)
+- [已知边界](#已知边界)
+- [版本兼容性](#版本兼容性)
+- [历史与研究候选](#历史与研究候选)
+- [文档索引](#文档索引)
+
+---
+
+## 与普通角色扮演的区别
+
+| 维度 | 普通 LLM 角色扮演 | PCFM |
+|---|---|---|
+| 人物知识来源 | 模型参数中的模糊印象 | **可逐字溯源的本人公开材料** |
+| 回答优先策略 | 模型自由生成 | **确定性证据优先**，原话逐字返回 |
+| 立场决定者 | LLM | **代码门禁**，LLM 只出候选 |
+| 证据不足时 | 编造一个"像"的回答 | **拒绝输出**或明确标注通用协助 |
+| 内容与风格 | 混合生成，风格层可改观点 | **严格分离**，风格层不能改立场/事实/数字 |
+| 可证伪性 | 无法追溯回答依据 | 每条回答可查看规划、证据引用与验证调用 |
+| 准确性声明 | 常暗示"还原人物" | 明确标注 `not_assessed`，不宣称恢复内心 |
 
 ---
 
@@ -25,7 +59,7 @@ PCFM（Person-Conditioned Factual Memory）是一个可证伪的人物对话模�
 ## 快速开始
 
 ```bash
-# 安装依赖
+# 安装 Python 依赖
 pip install -e .
 ```
 
@@ -54,6 +88,18 @@ python -m pcfm.webapp --data-dir <你的数据目录>
 
 ---
 
+## 界面预览
+
+**对话主界面** — 左侧人物列表，中间对话区，回答附带依据入口：
+
+![对话主界面](docs/assets/screenshot-chat.png)
+
+**依据抽屉** — 每条回答可展开查看本次规划、证据引用与验证调用次数：
+
+![依据抽屉](docs/assets/screenshot-evidence-drawer.png)
+
+---
+
 ## 对话机制
 
 对话输入不只处理最新一句。系统从原始消息重建话题线程、当前话题、被引用消息、人物此前的对话承诺、关系、场合和时间范围，把当前消息作为状态增量。
@@ -74,19 +120,6 @@ python -m pcfm.webapp --data-dir <你的数据目录>
 创建人物（系统搜索或自行提供资料）→ 系统从原始材料整理事件候选 → 审核原文真实性、位置和说话人 → 直接多轮交流 → 按需查找相近的现实回答 → 用户选择一条现实事件进入优化候选 → 通过角色隔离和留出非退化门禁后生成探索性新版本 → 查看或回退版本 → 归档、恢复或名称确认后永久删除。
 
 支持的资料格式：粘贴文本、TXT、Markdown、HTML、PDF、SRT/VTT、JSON、CSV、网页地址。公开资料搜索（Bing RSS）结果只能成为待核验候选。
-
----
-
-## 版本 0.11.0（当前发布）
-
-本发布聚焦人物对话模拟闭环，包含：
-
-- **5 个初始人物**（乔布斯 / 特朗普 / 巴菲特 / 王阳明 / 鲁迅）全部就绪。
-- **对话检索召回修复**：英文/口语提问因领域解析缺失导致相关事件检不到 → 领域缺失时按 trigger 相似度 + 内容词双门槛检索。
-- **统一推导门禁契约修复**：prompt 与门禁的倾向 ID 空间对齐，推导类问题不再恒失败。
-- **平台与渲染修复**：Windows 归档恢复 PermissionError、中文领域画像中英混杂、中文叙述倾向类型误拒。
-- **新增领域画像与叙述模块**：`domain_profile.py`、`profile_narration.py` 及测试。
-- **会话安全**：移除历史会话记录（`talk_histroy/`，曾含 API key）并加入 `.gitignore`。
 
 ---
 
@@ -169,4 +202,15 @@ python -m unittest discover -s tests -v
 - **研究候选**（均已 `rejected_candidate` 或 `not_supported`，未进入人物对话主路径）：Decision-Context-Rationale Evidence Contract v1、Person-Issue Relational Core v1、Joint Person Core v1、Reality Bridge v1、Support-set HyperNetwork v1、Anisotropic Empirical-Bayes Adapter v1、Person-choice Benchmark v1、Prospective Single-Person Pilot v1。
 - **Tyler historical corpus v1**：历史语料汇编层，`implemented_unintegrated`。
 
-详细合同与报告见对应 `*_REPORT.md` / `*.md` 文档。
+详细合同与报告见 [`docs/archive/`](docs/archive/) 下对应 `*_REPORT.md` / `*_CONTRACT.md` 文档。
+
+---
+
+## 文档索引
+
+| 文档 | 说明 |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构与改造基准（核心机制、数据模型、运行逻辑） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南 |
+| [docs/archive/](docs/archive/) | 历史模块合同、报告与门禁记录 |

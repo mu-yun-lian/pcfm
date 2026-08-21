@@ -1,17 +1,49 @@
-﻿[build-system]
+[build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pcfm-mvp"
 version = "0.11.0"
-description = "A local evidence-constrained person cognitive modeling workbench with a separate behavior baseline."
+description = "Evidence-constrained person dialogue simulation: reconstruct a person's value judgment network from verbatim public materials."
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = ["numpy>=2.0", "pypdf>=6.0"]
+authors = [
+    { name = "mu-yun-lian" }
+]
+keywords = [
+    "persona",
+    "dialogue-system",
+    "evidence-based",
+    "llm",
+    "cognitive-modeling",
+    "character-ai",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "numpy>=2.0",
+    "pypdf>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mu-yun-lian/pcfm"
+Repository = "https://github.com/mu-yun-lian/pcfm.git"
+Documentation = "https://github.com/mu-yun-lian/pcfm#readme"
+Issues = "https://github.com/mu-yun-lian/pcfm/issues"
+Changelog = "https://github.com/mu-yun-lian/pcfm/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 pcfm = ["web_static/*", "cases/*.json", "expression_profiles/*/*"]
-

@@ -38,3 +38,16 @@ Thumbs.db
 .idea/
 talk_histroy/
 *_output.txt
+
+# ---- 本地设计文档（不上传）----
+docs/archive/UI冒烟测试问题解决方案汇总.md
+docs/archive/UI冒烟问题1解决方案.md
+docs/archive/下一步修复方案.md
+docs/archive/后续修复要求文档.md
+docs/archive/评审修复建议文档.md
+docs/archive/评审缺陷修复方案.md
+docs/release-checklist.md
+docs/主线第5步SQLite读路径流程设计方案.md
+docs/事件原子提取与领域价值画像设计方案.md
+docs/初始人物逐字材料采集指引.md
+docs/材料处理链路5项修改方案.md
